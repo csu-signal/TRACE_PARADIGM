@@ -59,7 +59,7 @@ WINDOWS OS: Ensure that you have CUDA Toolkit 12.4 or greater installed within P
 
 See [mmdemo-azure-kinect/README.md](mmdemo-azure-kinect/README.md).
 
-## Hugging Face Setup
+## Hugging Face Setup (Has issues setting up - can skip)
 Hugging face is required to run the friction model, in order to connect to the hugging face endpoint an account is required and a token must be added to the environment. 
 
 The base model for the friction model this llama version, and end license agreement must be accepted on the account used to setup the token: https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct 
@@ -83,9 +83,9 @@ The server needs to start before the demo.
 `conda activate frictionEnv`
 `/home/traceteam/anaconda3/envs/frictionEnv/bin/python /home/traceteam/fact_server/friction_server.py`
 
-In another local terminal, run the demo in the proper environemnt.
+In another local terminal, run the demo in the proper environment.
 
-## Setting up the planner
+## Setting up the planner (can be skipped for now - 3/31/2025)
 
 Install Docker for windows from [here](https://docs.docker.com/desktop/setup/install/windows-install/). Make sure to run it before running the demo.
 
