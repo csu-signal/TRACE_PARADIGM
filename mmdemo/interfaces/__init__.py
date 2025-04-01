@@ -11,7 +11,7 @@ from dataclasses import dataclass, asdict
 import numpy as np
 
 from mmdemo.base_interface import BaseInterface
-from mmdemo.interfaces.data import Cone, Handedness, HciiObjectInfo2D, ObjectInfo2D, ObjectInfo3D, ParticipantInfo
+from mmdemo.interfaces.data import Cone, Handedness, HciiObjectInfo2D, Landmarks, ObjectInfo2D, ObjectInfo3D, ParticipantInfo
 
 
 @dataclass
@@ -117,6 +117,14 @@ class GestureConesInterface(ConesInterface):
     wtd_body_ids: list[int]
     azure_body_ids: list[int]
     handedness: list[Handedness]
+
+@dataclass
+class LandmarkInterface(BaseInterface):
+    """
+    `landmarks` -- the list of landmarks
+    """
+
+    landmarks: list[Landmarks]
     
 
 @dataclass

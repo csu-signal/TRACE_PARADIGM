@@ -13,6 +13,7 @@ from mmdemo.features import (
     DenseParaphrasedTranscription,
     DisplayFrame,
     EMNLPFrame,
+    DepthFrame,
     GazeBodyTracking,
     Gesture,
     Log,
@@ -170,14 +171,15 @@ if __name__ == "__main__":
     friction = Friction(dense_paraphrased_transcriptions, plan)
 
     # TODO create output frame for this demo
-    output_frame = EMNLPFrame(color, gesture, selected_objects, cgt, calibration, friction, plan)
+    # output_frame = EMNLPFrame(color, gesture, selected_objects, cgt, calibration, friction, plan)
+    output_frame = DepthFrame(depth)
 
     # run demo and show output
     demo = Demo(
         targets=[
             DisplayFrame(output_frame),
-            SaveVideo(output_frame, frame_rate=10),
-            Log(friction, csv=True),
+            #SaveVideo(output_frame, frame_rate=10),
+            #Log(friction, csv=True),
             #Log(transcriptions, stdout=True),
         ]
     )

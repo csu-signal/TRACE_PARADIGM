@@ -4,6 +4,7 @@ Helper dataclasses for interface definitions
 
 from dataclasses import dataclass
 from enum import Enum
+from sys import int_info
 
 import numpy as np
 
@@ -44,6 +45,19 @@ class Cone:
     base_radius: float
     vertex_radius: float
 
+
+@dataclass
+class Landmarks:
+    """
+    landmark joint data for hands or pose
+
+    bodyId -- the azure body id
+    joints -- the joint array
+    """
+
+    azureBodyId: int
+    joints: list[int]
+
 @dataclass
 class HciiSelectedObjectInfo:
     """
@@ -52,7 +66,7 @@ class HciiSelectedObjectInfo:
     """
 
     blockName: str
-    wtd_id: []
+    wtd_id: list[int]
 
 @dataclass
 class ParticipantInfo:
@@ -88,7 +102,7 @@ class HciiObjectInfo2D:
     p1: tuple[float, float]
     p2: tuple[float, float]
     object_class: GamrTarget
-    wtd_id: []
+    wtd_id: list[int]
 
 
 @dataclass
