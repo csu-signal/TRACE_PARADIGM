@@ -14,6 +14,7 @@ from mmdemo.interfaces import (
     DepthImageInterface,
     LandmarkInterface
 )
+from mmdemo.interfaces.data import Handedness
 
 class HandJoints(IntEnum):
     WRIST = 0,
@@ -193,6 +194,38 @@ bone_list = [
         [
             Joint.EYE_RIGHT,
             Joint.EAR_RIGHT
+        ],
+        [
+            Joint.PELVIS,
+            Joint.HIP_RIGHT
+        ],
+        [
+            Joint.PELVIS,
+            Joint.HIP_LEFT
+        ],
+        [
+            Joint.HIP_RIGHT,
+            Joint.KNEE_RIGHT
+        ],
+        [
+            Joint.ANKLE_RIGHT,
+            Joint.KNEE_RIGHT
+        ],
+        [
+            Joint.ANKLE_RIGHT,
+            Joint.FOOT_RIGHT
+        ],
+        [
+            Joint.HIP_LEFT,
+            Joint.KNEE_LEFT
+        ],
+        [
+            Joint.ANKLE_LEFT,
+            Joint.KNEE_LEFT
+        ],
+        [
+            Joint.ANKLE_LEFT,
+            Joint.FOOT_LEFT
         ]
 ]
 
@@ -251,7 +284,7 @@ class DepthFrame(BaseFeature[DepthImageInterface]):
         for land in gestureLandmarks.landmarks:
             if land.joints is not None:
                 dotColor = dotColors[land.azureBodyId % len(dotColors)]; 
-                color = colors[land.azureBodyId % len(colors)]; 
+                color = (255,255,255) if land.handedness.value == "Left" else colors[land.azureBodyId % len(colors)]; 
                 for hand in hand_list:
                     cv.line(depth_image_colorized, land.joints[int(hand[0])], land.joints[int(hand[1])], color=color, thickness=2)
 
@@ -264,10 +297,10 @@ class DepthFrame(BaseFeature[DepthImageInterface]):
             dotColor = dotColors[bodyId % len(dotColors)]; 
             color = colors[bodyId % len(colors)]; 
             dictionary = {}
+        
             for jointIndex, joint in enumerate(body["joint_positions"]):
                 bodyLocation = getPointSubcategory(Joint(jointIndex))
-                if(bodyLocation != BodyCategory.RIGHT_LEG and bodyLocation != BodyCategory.LEFT_LEG
-                and bodyLocation != BodyCategory.RIGHT_HAND and bodyLocation != BodyCategory.LEFT_HAND):
+                if(bodyLocation != BodyCategory.RIGHT_HAND and bodyLocation != BodyCategory.LEFT_HAND):
                     points2D, _ = cv.projectPoints(
                         np.array(joint), 
                         calibration.rotation,
@@ -278,6 +311,7 @@ class DepthFrame(BaseFeature[DepthImageInterface]):
                     point = (int(points2D[0][0][0] * 2**shift),int(points2D[0][0][1] * 2**shift))
                     dictionary[Joint(jointIndex)] = point
                     cv.circle(depth_image_colorized, point, radius=15, color=dotColor, thickness=15, shift=shift)
+
             for bone in bone_list:
                 if(getPointSubcategory(bone[0]) == BodyCategory.RIGHT_ARM or getPointSubcategory(bone[1]) == BodyCategory.RIGHT_ARM):
                     cv.line(depth_image_colorized, dictionary[bone[0]], dictionary[bone[1]], color=(255,255,255), thickness=3, shift=shift)

@@ -89,7 +89,8 @@ class GestureLandmarks(BaseFeature[LandmarkInterface]):
                     landmark_output.append(
                         Landmarks(
                             joints=joints,
-                            azureBodyId=body["wtd_body_id"]
+                            azureBodyId=body["wtd_body_id"],
+                            handedness=handedness
                         )
                     )
 
@@ -107,7 +108,6 @@ class GestureLandmarks(BaseFeature[LandmarkInterface]):
 
         Arguments:
         color -- color image interface
-        handedness -- Handedness.Left or Handedness.Right
         box -- [upper left, lower right] where both points are (x,y)
 
         Returns:

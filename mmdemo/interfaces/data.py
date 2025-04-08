@@ -53,10 +53,12 @@ class Landmarks:
 
     bodyId -- the azure body id
     joints -- the joint array
+    handedness -- the handedness
     """
 
     azureBodyId: int
     joints: list[int]
+    handedness: Handedness
 
 @dataclass
 class HciiSelectedObjectInfo:
