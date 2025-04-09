@@ -43,3 +43,4 @@ from mmdemo.features.pose_event.pose_event_decision_feature import PoseEvent
 from mmdemo.features.gesture_event.gesture_event_decision_feature import GestureEvent
 from mmdemo.features.engagement_level.engagement_level_feature import EngagementLevel
 from mmdemo.features.outputs.aaai_frame_feature import AAAIFrame
+from mmdemo.features.outputs.paradigm_frame_feature import ParadigmFrame

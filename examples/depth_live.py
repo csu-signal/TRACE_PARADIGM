@@ -1,4 +1,5 @@
 from pathlib import Path
+from mmdemo.features.outputs.emnlp_frame_feature import EMNLPFrame
 from mmdemo_azure_kinect import DeviceType, create_azure_kinect_features
 
 from mmdemo.demo import Demo
@@ -6,8 +7,21 @@ from mmdemo.features import (
     DisplayFrame,
     DepthFrame,
     GestureLandmarks,
-    SaveVideo
+    SaveVideo,
+    Log,
+    ParadigmFrame,
+    DisplayFrame,
+    EngagementLevel,
+    AaaiGazeBodyTracking,
+    GazeEvent,
+    GazeSelection,
+    AaaiGesture,
+    Object,
+    Pose,
+    SaveVideo,
+    SelectedObjects,
 )
+import yaml
 
 # mkv path for WTD group
 WTD_MKV_PATH = (
@@ -55,14 +69,20 @@ if __name__ == "__main__":
 
     gesture = GestureLandmarks(color, depth, body_tracking, calibration)
 
-    output_frame = DepthFrame(depth, gesture, body_tracking, calibration)
-
+    depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration)
+    color_output_frame = ParadigmFrame(
+        color=color,
+        gestureLandmarks=gesture,
+        bodyTracking = body_tracking,
+        calibration=calibration,
+    )
     # run demo and show output
     demo = Demo(
         targets=[
-            DisplayFrame(output_frame),
-            SaveVideo(output_frame, frame_rate=10),
-            #Log(friction, csv=True),
+            DisplayFrame(depth_output_frame),
+            SaveVideo(depth_output_frame, frame_rate=10, video_type="depth"),
+            SaveVideo(color_output_frame, frame_rate=10, video_type="color"),
+            Log(gesture, body_tracking, csv=True),
             #Log(transcriptions, stdout=True),
         ]
     )
