@@ -31,6 +31,7 @@ class SaveVideo(BaseFeature[EmptyInterface]):
         *,
         frame_rate=30,
         video_name: Path | None = None,
+        video_type: str | None = ""
     ):
         super().__init__(color)
 
@@ -38,7 +39,7 @@ class SaveVideo(BaseFeature[EmptyInterface]):
 
         if video_name is None:
             self.video_name = Path(
-                "output-video-"
+                f"output-video-{video_type}-"
                 + datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S" + ".mp4")
             )
         else:
