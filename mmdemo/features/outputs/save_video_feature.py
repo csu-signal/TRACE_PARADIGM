@@ -8,7 +8,7 @@ import cv2 as cv
 
 from mmdemo.base_feature import BaseFeature
 from mmdemo.interfaces import ColorImageInterface, EmptyInterface
-from mmdemo.utils.files import create_tmp_dir
+from mmdemo.utils.files import create_tmp_dir, create_tmp_dir_with_featureName
 
 
 @final
@@ -31,11 +31,14 @@ class SaveVideo(BaseFeature[EmptyInterface]):
         *,
         frame_rate=30,
         video_name: Path | None = None,
-        video_type: str | None = ""
+        video_type: str | None = "",
+        delete_output=True
     ):
         super().__init__(color)
 
         self.frame_rate = frame_rate
+        self.video_type = video_type
+        self.delete_output = delete_output
 
         if video_name is None:
             self.video_name = Path(
@@ -46,7 +49,7 @@ class SaveVideo(BaseFeature[EmptyInterface]):
             self.video_name = Path(video_name)
 
     def initialize(self):
-        self.tmp_dir = create_tmp_dir()
+        self.tmp_dir = create_tmp_dir_with_featureName(self.video_type)
         self.counter = 0
 
     def finalize(self):
@@ -54,7 +57,9 @@ class SaveVideo(BaseFeature[EmptyInterface]):
         os.system(
             f"ffmpeg -framerate {self.frame_rate} -i {frame_path} -c:v libx264 -pix_fmt yuv420p {self.video_name}"
         )
-        shutil.rmtree(self.tmp_dir)
+
+        if self.delete_output:
+            shutil.rmtree(self.tmp_dir)
 
     def get_output(
         self,

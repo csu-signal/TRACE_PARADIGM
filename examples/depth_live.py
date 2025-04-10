@@ -1,5 +1,6 @@
 from pathlib import Path
 from mmdemo.features.outputs.emnlp_frame_feature import EMNLPFrame
+from mmdemo.features.outputs.paradigm_logging_feature import ParadigmLog
 from mmdemo_azure_kinect import DeviceType, create_azure_kinect_features
 
 from mmdemo.demo import Demo
@@ -80,9 +81,9 @@ if __name__ == "__main__":
     demo = Demo(
         targets=[
             DisplayFrame(depth_output_frame),
-            SaveVideo(depth_output_frame, frame_rate=10, video_type="depth"),
-            SaveVideo(color_output_frame, frame_rate=10, video_type="color"),
-            Log(gesture, body_tracking, csv=True),
+            SaveVideo(depth_output_frame, frame_rate=30, video_type="depth", delete_output=False),
+            SaveVideo(color_output_frame, frame_rate=30, video_type="color", delete_output=False),
+            ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
             #Log(transcriptions, stdout=True),
         ]
     )
