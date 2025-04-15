@@ -1,5 +1,6 @@
 from enum import Enum, IntEnum
 from typing import final
+from xmlrpc.client import Boolean, boolean
 
 import cv2 as cv
 import numpy as np
@@ -252,9 +253,11 @@ class DepthFrame(BaseFeature[DepthImageInterface]):
         depth: BaseFeature[DepthImageInterface],
         gestureLandmarks: BaseFeature[LandmarkInterface],
         bodyTracking: BaseFeature[BodyTrackingInterface], 
-        calibration: BaseFeature[CameraCalibrationInterface]
+        calibration: BaseFeature[CameraCalibrationInterface],
+        landmarks: bool = True
     ):
         super().__init__(depth, gestureLandmarks, bodyTracking, calibration)
+        self.landmarks = landmarks
 
     def initialize(self):
         self.has_cgt_data = False
@@ -281,42 +284,43 @@ class DepthFrame(BaseFeature[DepthImageInterface]):
         depth_image_8bit = cv.normalize(depth.frame, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
         depth_image_colorized = cv.applyColorMap(depth_image_8bit, cv.COLORMAP_BONE)
 
-        for land in gestureLandmarks.landmarks:
-            if land.joints is not None:
-                dotColor = dotColors[land.azureBodyId % len(dotColors)]; 
-                color = (255,255,255) if land.handedness.value == "Left" else colors[land.azureBodyId % len(colors)]; 
-                for hand in hand_list:
-                    cv.line(depth_image_colorized, land.joints[int(hand[0])], land.joints[int(hand[1])], color=color, thickness=2)
+        if self.landmarks:
+            for land in gestureLandmarks.landmarks:
+                if land.joints is not None:
+                    dotColor = dotColors[land.azureBodyId % len(dotColors)]; 
+                    color = (255,255,255) if land.handedness.value == "Left" else colors[land.azureBodyId % len(colors)]; 
+                    for hand in hand_list:
+                        cv.line(depth_image_colorized, land.joints[int(hand[0])], land.joints[int(hand[1])], color=color, thickness=2)
 
-                for joint in land.joints:
-                    cv.circle(depth_image_colorized, (joint[0], joint[1]), radius=2, thickness=2, color=dotColor)
+                    for joint in land.joints:
+                        cv.circle(depth_image_colorized, (joint[0], joint[1]), radius=2, thickness=2, color=dotColor)
 
-        bt = fix_body_id(bt)
-        for bodyIndex, body in enumerate(bt.bodies):  
-            bodyId = int(body["wtd_body_id"])
-            dotColor = dotColors[bodyId % len(dotColors)]; 
-            color = colors[bodyId % len(colors)]; 
-            dictionary = {}
-        
-            for jointIndex, joint in enumerate(body["joint_positions"]):
-                bodyLocation = getPointSubcategory(Joint(jointIndex))
-                if(bodyLocation != BodyCategory.RIGHT_HAND and bodyLocation != BodyCategory.LEFT_HAND):
-                    points2D, _ = cv.projectPoints(
-                        np.array(joint), 
-                        calibration.rotation,
-                        calibration.translation,
-                        calibration.camera_matrix,
-                        calibration.distortion)  
-                    
-                    point = (int(points2D[0][0][0] * 2**shift),int(points2D[0][0][1] * 2**shift))
-                    dictionary[Joint(jointIndex)] = point
-                    cv.circle(depth_image_colorized, point, radius=15, color=dotColor, thickness=15, shift=shift)
+            bt = fix_body_id(bt)
+            for bodyIndex, body in enumerate(bt.bodies):  
+                bodyId = int(body["wtd_body_id"])
+                dotColor = dotColors[bodyId % len(dotColors)]; 
+                color = colors[bodyId % len(colors)]; 
+                dictionary = {}
+            
+                for jointIndex, joint in enumerate(body["joint_positions"]):
+                    bodyLocation = getPointSubcategory(Joint(jointIndex))
+                    if(bodyLocation != BodyCategory.RIGHT_HAND and bodyLocation != BodyCategory.LEFT_HAND):
+                        points2D, _ = cv.projectPoints(
+                            np.array(joint), 
+                            calibration.rotation,
+                            calibration.translation,
+                            calibration.camera_matrix,
+                            calibration.distortion)  
+                        
+                        point = (int(points2D[0][0][0] * 2**shift),int(points2D[0][0][1] * 2**shift))
+                        dictionary[Joint(jointIndex)] = point
+                        cv.circle(depth_image_colorized, point, radius=15, color=dotColor, thickness=15, shift=shift)
 
-            for bone in bone_list:
-                if(getPointSubcategory(bone[0]) == BodyCategory.RIGHT_ARM or getPointSubcategory(bone[1]) == BodyCategory.RIGHT_ARM):
-                    cv.line(depth_image_colorized, dictionary[bone[0]], dictionary[bone[1]], color=(255,255,255), thickness=3, shift=shift)
-                else:
-                    cv.line(depth_image_colorized, dictionary[bone[0]], dictionary[bone[1]], color=color, thickness=3, shift=shift)
+                for bone in bone_list:
+                    if(getPointSubcategory(bone[0]) == BodyCategory.RIGHT_ARM or getPointSubcategory(bone[1]) == BodyCategory.RIGHT_ARM):
+                        cv.line(depth_image_colorized, dictionary[bone[0]], dictionary[bone[1]], color=(255,255,255), thickness=3, shift=shift)
+                    else:
+                        cv.line(depth_image_colorized, dictionary[bone[0]], dictionary[bone[1]], color=color, thickness=3, shift=shift)
 
         depth_image_colorized = cv.resize(depth_image_colorized, (1280, 720))
         return DepthImageInterface(frame=depth_image_colorized, frame_count=depth.frame_count)

@@ -5,6 +5,8 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import final
+import cv2 as cv
+import numpy as np
 
 from mmdemo.base_feature import BaseFeature
 from mmdemo.base_interface import BaseInterface
@@ -92,6 +94,10 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                 header_row = ["frame_index"]
                 output_row = [self.frame]
 
+                header_row.append('aspect_ratio')
+                h, w = depth.frame.shape
+                output_row.append(f"{w}x{h}")
+
                 header_row.append("patient_body_joints")
                 header_row.append("practitioner_body_joints")
 
@@ -100,10 +106,18 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                 bt = fix_body_id(bt)
                 for bodyIndex, body in enumerate(bt.bodies):  
                     bodyId = int(body["wtd_body_id"])
-                    if(bodyId == 1):
-                        patient = body["joint_positions"]
-                    if(bodyId == 2):
-                        practitioner = body["joint_positions"]
+                    for jointIndex, joint in enumerate(body["joint_positions"]):
+                        points2D, _ = cv.projectPoints(
+                            np.array(joint), 
+                            calibration.rotation,
+                            calibration.translation,
+                            calibration.camera_matrix,
+                            calibration.distortion) 
+                        point = (int(points2D[0][0][0]),int(points2D[0][0][1]))  
+                        if(bodyId == 1):
+                            patient.append(point)
+                        if(bodyId == 2):
+                            practitioner.append(point)
                 
                 output_row.append(patient)
                 output_row.append(practitioner)
@@ -118,30 +132,40 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                 patient_r = []
                 patient_l = []
                 for land in gestureLandmarks.landmarks:
-                    if land.joints is not None:
-                        joints3D = []
-                        try:
-                            for joint in land.joints:
-                                joints3D.append(pixel_to_camera_3d(joint, depth, calibration))
-                            if(land.azureBodyId == 1):
-                                if(land.handedness.value == "Right"):
-                                    patient_r = joints3D
-                                if(land.handedness.value == "Left"):
-                                    patient_l = joints3D
+                    # if land.joints is not None:
+                    #     joints3D = []
+                    #     try:
+                    #         for joint in land.joints:
+                    #             joints3D.append(pixel_to_camera_3d(joint, depth, calibration))
+                    if(land.azureBodyId == 1):
+                        if(land.handedness.value == "Right"):
+                            patient_r = land.joints
+                        if(land.handedness.value == "Left"):
+                            patient_l = land.joints
 
-                            if(land.azureBodyId == 2):
-                                if(land.handedness.value == "Right"):
-                                    practitioner_r = joints3D
-                                if(land.handedness.value == "Left"):
-                                    practitioner_l = joints3D
+                    if(land.azureBodyId == 2):
+                        if(land.handedness.value == "Right"):
+                            practitioner_r = land.joints
+                        if(land.handedness.value == "Left"):
+                            practitioner_l = land.joints
 
-                        except CoordinateConversionError:
-                            pass
+                        # except CoordinateConversionError:
+                        #     pass
 
                 output_row.append(patient_r)
                 output_row.append(patient_l)
                 output_row.append(practitioner_r)
                 output_row.append(practitioner_l)
+
+                header_row.append('rotation')
+                header_row.append('translation')
+                header_row.append('camera_matrix')
+                header_row.append('distortion')
+
+                output_row.append(calibration.rotation)
+                output_row.append(calibration.translation)
+                output_row.append(calibration.camera_matrix)
+                output_row.append(calibration.distortion)
 
                 if self.needs_header:
                     writer.writerow(header_row)

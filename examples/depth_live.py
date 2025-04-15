@@ -70,19 +70,20 @@ if __name__ == "__main__":
 
     gesture = GestureLandmarks(color, depth, body_tracking, calibration)
 
-    depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration)
+    depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=False)
     color_output_frame = ParadigmFrame(
         color=color,
         gestureLandmarks=gesture,
         bodyTracking = body_tracking,
         calibration=calibration,
+        landmarks = False
     )
     # run demo and show output
     demo = Demo(
         targets=[
             DisplayFrame(depth_output_frame),
-            SaveVideo(depth_output_frame, frame_rate=30, video_type="depth", delete_output=False),
-            SaveVideo(color_output_frame, frame_rate=30, video_type="color", delete_output=False),
+            SaveVideo(depth_output_frame, frame_rate=10, video_type="depth", delete_output=False),
+            SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
             ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
             #Log(transcriptions, stdout=True),
         ]
