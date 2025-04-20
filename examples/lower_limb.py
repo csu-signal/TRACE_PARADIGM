@@ -1,26 +1,14 @@
 from pathlib import Path
+from this import d
 from mmdemo.features.outputs.emnlp_frame_feature import EMNLPFrame
 from mmdemo.features.outputs.paradigm_logging_feature import ParadigmLog
+from mmdemo.features.pose.cliff_pose_feature import CliffPose
 from mmdemo_azure_kinect import DeviceType, create_azure_kinect_features
 
 from mmdemo.demo import Demo
 from mmdemo.features import (
-    DisplayFrame,
-    DepthFrame,
-    GestureLandmarks,
+    DisplayScene,
     SaveVideo,
-    Log,
-    ParadigmFrame,
-    DisplayFrame,
-    EngagementLevel,
-    AaaiGazeBodyTracking,
-    GazeEvent,
-    GazeSelection,
-    AaaiGesture,
-    Object,
-    Pose,
-    SaveVideo,
-    SelectedObjects,
 )
 import yaml
 
@@ -68,27 +56,19 @@ if __name__ == "__main__":
     # )
     ############################################################################
 
-    gesture = GestureLandmarks(color, depth, body_tracking, calibration)
+    # gesture = GestureLandmarks(color, depth, body_tracking, calibration)
 
-    depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=True)
-    depth_output_frame_save = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=False)
-    color_output_frame = ParadigmFrame(
-        color=color,
-        gestureLandmarks=gesture,
-        bodyTracking = body_tracking,
-        calibration=calibration,
-        landmarks = False
-    )
+    displayScene = CliffPose(color, depth, body_tracking, calibration)
+    
     # run demo and show output
     demo = Demo(
         targets=[
-            DisplayFrame(depth_output_frame),
-            SaveVideo(depth_output_frame_save, frame_rate=10, video_type="depth", delete_output=False),
-            SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
-            ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
+            DisplayScene(displayScene),
+            # SaveVideo(depth_output_frame_save, frame_rate=10, video_type="depth", delete_output=False),
+            # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
+            # ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
             #Log(transcriptions, stdout=True),
         ]
     )
     #demo.show_dependency_graph()
     demo.run()
-

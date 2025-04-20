@@ -20,3 +20,6 @@ tmp_*/
 *.pddl
 /demo/featureModules/objects/objectDetectionModels/best_model-objects.pth
 /.vs/*
+/mmdemo/utils/cliff_utils/data/*
+/mmdemo/utils/cliff_utils/mmdetection/*
+/mmdemo/utils/cliff_utils/mmtracking/checkpoints/bytetrack_yolox_x_crowdhuman_mot17-private-half_20211218_205500-1985c9f0.pth

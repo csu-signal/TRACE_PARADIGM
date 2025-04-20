@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
+import pyrender
 
 import numpy as np
 
@@ -31,6 +32,14 @@ class ColorImageInterface(BaseInterface):
 
     frame_count: int
     frame: np.ndarray
+
+@dataclass
+class SceneInterface(BaseInterface):
+    """
+    mesh_scene -- the scene value (pyrender.Scene)
+    """
+
+    mesh_scene: pyrender.Scene
 
 
 @dataclass

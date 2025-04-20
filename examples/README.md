@@ -10,7 +10,10 @@
     - [HCII Paper Link](https://www.nikhilkrishnaswamy.com/assets/docs/pdfs/HCII-2025-Bradford.pdf)
 - `aaai_live.py` -- AAAI Paper, Speech is not Enough (Feb 2025)
     - [ARXIV Paper Link](https://arxiv.org/abs/2412.05797)
+
+# PARADIGM Entry points
 - `depth_live.py` -- PARADIGM Depth Visualization (work/applications in progress)
+- `lower_limb.py` -- PARADIGM Lower Limb Demo Mesh Visualization (work/applications in progress)
 
 ## Contributing
 
