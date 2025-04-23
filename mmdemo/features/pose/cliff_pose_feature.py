@@ -26,11 +26,16 @@ import numpy as np
 import torch
 import trimesh
 import pyrender
-import cv2
-from mmdemo.utils.cliff_utils.common.constants import SMPL_MODEL_DIR
+from pytorch3d import transforms
+import cv2 as cv
+
+from mmdemo.utils.cliff_utils.common import constants
+from mmdemo.utils.cliff_utils.common.utils import strip_prefix_if_present, cam_crop2full
+from mmdemo.utils.cliff_utils.common.constants import SMPL_MODEL_DIR, SMPL_MEAN_PARAMS, SMPL_CKPT
 from mmdemo.utils.cliff_utils.models.smpl import SMPL    
 from mmdemo.utils.cliff_utils.smplify import SMPLify  
-from mmdemo.utils.cliff_utils.losses import perspective_projection 
+from mmdemo.utils.cliff_utils.losses import perspective_projection
+from mmdemo.utils.cliff_utils.models.cliff_hr48.cliff import CLIFF as cliff_hr48 
 
 # SMPL expected joint ordering as provided
 JOINT_NAMES = [
@@ -202,6 +207,14 @@ class CliffPose(BaseFeature[SceneInterface]):
     def initialize(self):
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
+         # Load the pretrained CLIFF model.
+        cliff = eval("cliff_hr48")
+        self.cliff_model = cliff(SMPL_MEAN_PARAMS).to(self.device)
+        state_dict = torch.load(SMPL_CKPT)['model']
+        state_dict = strip_prefix_if_present(state_dict, prefix="module.")
+        self.cliff_model.load_state_dict(state_dict, strict=True)
+        self.cliff_model.eval()
+
     def get_output(
         self,
         color: ColorImageInterface,
@@ -209,87 +222,167 @@ class CliffPose(BaseFeature[SceneInterface]):
         bt: BodyTrackingInterface,
         calibration: CameraCalibrationInterface,
     ):
-        if not color.is_new() or not depth.is_new() or not bt.is_new():
+        if not color.is_new() or not depth.is_new() or not bt.is_new() or not calibration.is_new():
             return None
 
-        azure_keypoints_sample = np.array([[(401, 493), (388, 392), (376, 305), (355, 164), (383, 190), (476, 221), (531, 370), (539, 454), (523, 504), (505, 561)
-                                            , (481, 505), (333, 186), (240, 203), (158, 371), (209, 454), (201, 495), (272, 548)
-                                            , (281, 467), (460, 489), (543, 678), (577, 811), (613, 890), (344, 496), (365, 716), (400, 864), (419, 951), (349, 107), (373, 93)
-                                            , (384, 65), (406, 71), (343, 62), (276, 51)]])
-        print(azure_keypoints_sample.shape)
-        azure_keypoints_sample = azure_keypoints_sample.reshape(32,2)
-        print(azure_keypoints_sample.shape)
-        print(azure_keypoints_sample)
+        # getting RGB image 
 
-        smpl_keypoints = self.map_kinect_to_smpl(azure_keypoints_sample)
+        frame = color.frame
+
+        # get body tracking info (azure_keypoints)
+        practitioner = []
+        patient = []
+        bt = fix_body_id(bt)
+        for bodyIndex, body in enumerate(bt.bodies):  
+            bodyId = int(body["wtd_body_id"])
+            for jointIndex, joint in enumerate(body["joint_positions"]):
+                points2D, _ = cv.projectPoints(
+                    np.array(joint), 
+                    calibration.rotation,
+                    calibration.translation,
+                    calibration.camera_matrix,
+                    calibration.distortion) 
+                point = (int(points2D[0][0][0]),int(points2D[0][0][1]))  
+                if(bodyId == 1):
+                    patient.append(point)
+                if(bodyId == 2):
+                    practitioner.append(point)
+
+
+        if len(patient) == 0:
+            return None
+        patient_azure_keypoints = np.array(patient).reshape(32,2)
+        # print(patient_azure_keypoints.shape)
+        # print(patient_azure_keypoints)
+
+        # Camera Calibration
+
+        K = calibration.camera_matrix
+        focal_length_value = (K[0,0] + K[1,1]) / 2.0
+        camera_center = np.array([960, 540])
+
+        # print(frame, "\n\n\n", K)
+        # MAP from Kinect to openpose sequence of joints
+
+        xy = self.map_kinect_to_smpl(patient_azure_keypoints)
+        conf        = (xy != 0).any(axis=1, keepdims=True).astype(np.float32)
+        smpl_kpts   = np.hstack([xy, conf])    # shape (49, 3)
         
-        print("Mapped SMPL keypoints shape:", smpl_keypoints.shape)
-        print("SMPL keypoints:")
-        print(smpl_keypoints)
-
-        # add column of ones for joint confidence
-        confi_ones = np.ones((smpl_keypoints.shape[0], 1))
-        smpl_keypoints = np.hstack((smpl_keypoints, confi_ones))
-        print("Final shape after appending homogeneous coordinate:", smpl_keypoints.shape)
-        print("Final keypoints array:")
-        print(smpl_keypoints)
-
+        kpts        = smpl_kpts[None].astype(np.float32)    # (1, 49, 3)
+        keypoints   = torch.from_numpy(kpts).to(self.device)
+        # print(f"keypoints shape = {keypoints.shape}")
 
         # Convert 2D keypoints to torch tensor and add batch dimension: shape (1, 49, 3)
-        keypoints = torch.from_numpy(smpl_keypoints[None]).float().to(self.device)
+        # keypoints = torch.from_numpy(keypoints[None]).float().to(self.device)
         
-        # Define camera parameters for SMPLify.
 
+        # Compute bounding box
+        non_zero_mask = ~(patient_azure_keypoints == 0).any(axis=1)
+        valid_xy      = patient_azure_keypoints[non_zero_mask]
+
+        
         img_w, img_h = 1920.0, 1080.0
-        
-        # Initialize SMPL parameters: zero pose (72), zero shape (10), and dummy camera (3).
-        init_pose = torch.zeros((1, 72), dtype=torch.float32, device=self.device)
-        init_betas = torch.zeros((1, 10), dtype=torch.float32, device=self.device)
-        #init_cam = torch.zeros((1, 3), dtype=torch.float32, device=device)
 
-        # Camera calibration
-        K = np.array([[917.34753418,   0.        , 954.6260376 ],
-                    [   0.        , 917.26507568, 554.48309326],
-                    [   0.        ,   0.        ,   1.        ]])
-        focal_length_value = (K[0,0] + K[1,1]) / 2.0
-        camera_center = np.array([K[0,2], K[1,2]])
+        # ----- compute min / max per axis ----------------------------------
+        x_min, y_min = valid_xy.min(axis=0)
+        x_max, y_max = valid_xy.max(axis=0)
+
+        pad = 150
+        x_min, y_min = x_min - pad, y_min - pad
+        x_max, y_max = x_max + pad, y_max + pad
+
+        # clamp to image frame
+        x_min = np.clip(x_min, 0, img_w-1)
+        y_min = np.clip(y_min, 0, img_h - 1)
+        x_max = np.clip(x_max, 0, img_w - 1)
+        y_max = np.clip(y_max, 0, img_h - 1)
+
+        bbox = (int(x_min), int(y_min), int(x_max), int(y_max))  # (x1, y1, x2, y2)
+        #print(f"Bounding‑box (pad {pad}px):", bbox)
+
+        w, h = x_max - x_min, y_max - y_min   
+
+        smpl = SMPL(constants.SMPL_MODEL_DIR, batch_size=1).to(self.device)
+        norm_img = self.preprocess_frame(frame, (224, 224)).to(self.device)
+        focal_length = torch.tensor([focal_length_value], dtype=torch.float32, device=self.device) #500
+        camera_center_tensor = torch.tensor([camera_center], dtype=torch.float32, device=self.device)
+
+        # Bounding box operations
+        center = torch.tensor([[(x_min + x_max)/2.0,
+                            (y_min + y_max)/2.0]], device=self.device)
+
+        scale  = torch.tensor([max(w, h) / 200.0], device=self.device)
+        b      = scale * 200.0
+
+        # 1) stack into a (1×3) tensor [dx,dy,b]
+        bbox_info = torch.stack([
+            center[:, 0] - img_w / 2.0,   # dx
+            center[:, 1] - img_h / 2.0,   # dy
+            b                              # baseline
+        ], dim=-1)                         # shape [1,3]
+
+        # 2) normalize x,y by focal_length and multiply by 2.8
+        #    (focal_length should be shape [1] or broadcastable)
+        bbox_info[:, :2] = bbox_info[:, :2] \
+                        / focal_length.unsqueeze(-1) \
+                        * 2.8
+
+        # 3) normalize the baseline entry
+        bbox_info[:, 2] = (
+            bbox_info[:, 2]
+        - 0.24 * focal_length
+        ) / (0.06 * focal_length)
+        bbox_info = bbox_info.float() 
         
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        focal_length = torch.tensor([focal_length_value], dtype=torch.float32, device=device)
-        camera_center_tensor = torch.tensor([camera_center], dtype=torch.float32, device=device)
+        # Run CLIFF
+        with torch.no_grad():
+                pred_rotmat, pred_betas, pred_cam_crop = self.cliff_model(norm_img, bbox_info)
         
-        translation = np.array([-32.05845642, -2.09264588, 3.95474815])
-        R = np.array([[ 9.99998212e-01,  1.68047613e-03, -8.45391944e-04],
-                    [-1.59707933e-03,  9.95895743e-01,  9.04935747e-02],
-                    [ 9.93994530e-04, -9.04920623e-02,  9.95896697e-01]])
-        
-        # Initialize the camera translation using the calibration:
-        init_cam = torch.tensor([translation], dtype=torch.float32, device=device)
-        
-        # Load the SMPL model (ensure your SMPL model directory is set correctly in constants)
-        smpl = SMPL(SMPL_MODEL_DIR, batch_size=1).to(device)
+        img_h_t = torch.tensor([img_h], dtype=torch.float32, device=self.device)
+        img_w_t = torch.tensor([img_w], dtype=torch.float32, device=self.device)
+
+        # now both are tensors, so stack will work
+        full_img_shape = torch.stack((img_h_t, img_w_t), dim=-1)   
+        pred_cam_full = cam_crop2full(pred_cam_crop, center, scale, full_img_shape, focal_length)
+        init_pose = transforms.matrix_to_axis_angle(pred_rotmat).contiguous().view(-1, 72)        
         
         # Run SMPLify optimization
         smplify = SMPLify(step_size=1e-2, batch_size=1, num_iters=100, focal_length=focal_length)
-        results = smplify(init_pose.detach(), init_betas.detach(), init_cam.detach(), camera_center_tensor, keypoints)
+        results = smplify(init_pose.detach(), pred_betas.detach(), pred_cam_full.detach(), camera_center_tensor, keypoints)
         
         new_opt_vertices, new_opt_joints, new_opt_pose, new_opt_betas, new_opt_cam_t, new_opt_joint_loss = results
         
+        # Get SMPL faces and vertices
         with torch.no_grad():
             pred_output = smpl(betas=new_opt_betas,
                             body_pose=new_opt_pose[:, 3:],global_orient=new_opt_pose[:, :3],
                             pose2rot=True,
-                            transl=init_cam)
-            vertices = pred_output.vertices.cpu().numpy().squeeze()
-        
-        # Render the SMPL mesh with pyrender on a blank background.
-        mesh = trimesh.Trimesh(vertices, smpl.faces)
+                            transl=new_opt_cam_t)
+
+        #vertices = pred_output.vertices.cpu().detach().numpy()
+        vertices = pred_output.vertices.cpu().detach().numpy()
+        if vertices.ndim == 3:
+            vertices = vertices[0]
+        faces = smpl.faces
+        if not isinstance(faces, np.ndarray):
+            faces = faces.cpu().numpy() if torch.is_tensor(faces) else faces
+
+        mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
         pyr_mesh = pyrender.Mesh.from_trimesh(mesh)
         scene = pyrender.Scene()
         scene.add(pyr_mesh)
         
-        return SceneInterface(mesh_scene=scene) 
+        # Open pyrender window
+        viewer = pyrender.Viewer(scene, use_raymond_lighting=True)
+        
 
+        # testing info transfer
+
+        print("RGB Frame:  ", frame)
+        print("Azure keypoints:  ", keypoints)
+        print("camera calibration:  ", K)
+        # return SceneInterface(mesh_scene=scene) 
+        return None
     def map_kinect_to_smpl(self, kinect_keypoints):
         """
         Map Kinect keypoints to SMPL joint ordering.
@@ -314,3 +407,15 @@ class CliffPose(BaseFeature[SceneInterface]):
                 smpl_keypoints.append(kinect_keypoints[mapping])
         
         return np.array(smpl_keypoints)
+
+    def preprocess_frame(self, frame, target_size=(224, 224)):
+        """
+        Preprocess the input frame (BGR) to a normalized tensor.
+        Returns norm_img as a tensor of shape (1, 3, H, W) in float32.
+        """
+        resized = cv.resize(frame, target_size)
+        rgb = (resized.astype(np.float32) / 255.0 - 0.5) / 0.5  
+        #rgb = resized/255.0 #cv2.cvtColor(resized, cv2.COLOR_BGR2RGB) / 255.0
+        #cv2.imwrite("norm_img.jpg", rgb*255)
+        norm_img = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).float()
+        return norm_img

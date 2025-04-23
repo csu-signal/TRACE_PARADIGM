@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from torch.nn import functional as F
 
-from common import constants
+from mmdemo.utils.cliff_utils.common import constants
 
 
 def get_transform(center, scale, res, rot=0):

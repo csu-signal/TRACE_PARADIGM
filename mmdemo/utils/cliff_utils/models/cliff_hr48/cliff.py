@@ -19,10 +19,10 @@ import numpy as np
 import math
 import os.path as osp
 
-from common.imutils import rot6d_to_rotmat
-from models.backbones.hrnet.cls_hrnet import HighResolutionNet
-from models.backbones.hrnet.hrnet_config import cfg
-from models.backbones.hrnet.hrnet_config import update_config
+from mmdemo.utils.cliff_utils.common.imutils import rot6d_to_rotmat
+from mmdemo.utils.cliff_utils.models.backbones.hrnet.cls_hrnet import HighResolutionNet
+from mmdemo.utils.cliff_utils.models.backbones.hrnet.hrnet_config import cfg
+from mmdemo.utils.cliff_utils.models.backbones.hrnet.hrnet_config import update_config
 
 
 class CLIFF(nn.Module):

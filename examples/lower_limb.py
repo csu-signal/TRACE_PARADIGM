@@ -1,6 +1,9 @@
 from pathlib import Path
 from this import d
+from mmdemo.features.gesture.gesture_landmark_feature import GestureLandmarks
+from mmdemo.features.outputs.display_frame_feature import DisplayFrame
 from mmdemo.features.outputs.emnlp_frame_feature import EMNLPFrame
+from mmdemo.features.outputs.paradigm_frame_feature import ParadigmFrame
 from mmdemo.features.outputs.paradigm_logging_feature import ParadigmLog
 from mmdemo.features.pose.cliff_pose_feature import CliffPose
 from mmdemo_azure_kinect import DeviceType, create_azure_kinect_features
@@ -56,13 +59,22 @@ if __name__ == "__main__":
     # )
     ############################################################################
 
-    # gesture = GestureLandmarks(color, depth, body_tracking, calibration)
+    gesture = GestureLandmarks(color, depth, body_tracking, calibration)
 
     displayScene = CliffPose(color, depth, body_tracking, calibration)
+
+    color_output_frame = ParadigmFrame(
+        color=color,
+        gestureLandmarks=gesture,
+        bodyTracking = body_tracking,
+        calibration=calibration,
+        landmarks = False
+    )
     
     # run demo and show output
     demo = Demo(
         targets=[
+            DisplayFrame(color_output_frame),
             DisplayScene(displayScene),
             # SaveVideo(depth_output_frame_save, frame_rate=10, video_type="depth", delete_output=False),
             # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
