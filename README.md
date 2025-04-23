@@ -91,6 +91,12 @@ Install Docker for windows from [here](https://docs.docker.com/desktop/setup/ins
 
 In `mmdemo/features/planner/planner.py`, change the path in check solution from `C:\\Users\\benkh\\Documents\\GitHub\\TRACE\\mmdemo\\features\\planner\\benchmarks` to the path of the benchmarks folder on your machine.
 
+## Additional setup for CLIFF
+
+pytorch3d is required for rendering the mesh from CLIFF. As of 4/23/2025, standard conda and pip channels do not have a default installation of pytorch3d on windows. To install the package run the following command
+
+`pip install --extra-index-url https://miropsota.github.io/torch_packages_builder pytorch3d==0.7.8+pt2.6.0cu124`
+
 ## Common Setup Issues
 
 ### Solution for .dll File Errors
