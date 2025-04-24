@@ -18,8 +18,8 @@ import torch.nn as nn
 import numpy as np
 import math
 
-from common.imutils import rot6d_to_rotmat
-from models.backbones.resnet import ResNet
+from mmdemo.utils.cliff_utils.common.imutils import rot6d_to_rotmat
+from mmdemo.utils.cliff_utils.models.backbones.resnet import ResNet
 
 
 class CLIFF(nn.Module):

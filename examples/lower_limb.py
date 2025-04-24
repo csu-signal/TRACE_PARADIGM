@@ -1,5 +1,6 @@
 from pathlib import Path
-from this import d
+from queue import Queue, SimpleQueue
+from threading import Lock
 from mmdemo.features.gesture.gesture_landmark_feature import GestureLandmarks
 from mmdemo.features.outputs.display_frame_feature import DisplayFrame
 from mmdemo.features.outputs.emnlp_frame_feature import EMNLPFrame
@@ -76,7 +77,7 @@ if __name__ == "__main__":
         targets=[
             DisplayFrame(color_output_frame),
             DisplayScene(displayScene),
-            # SaveVideo(depth_output_frame_save, frame_rate=10, video_type="depth", delete_output=False),
+            SaveVideo(color_output_frame, frame_rate=10, video_type="depth", delete_output=False),
             # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
             # ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
             #Log(transcriptions, stdout=True),
