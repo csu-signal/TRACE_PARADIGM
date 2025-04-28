@@ -77,7 +77,7 @@ if __name__ == "__main__":
         targets=[
             DisplayFrame(color_output_frame),
             DisplayScene(displayScene),
-            SaveVideo(color_output_frame, frame_rate=10, video_type="depth", delete_output=False),
+            # SaveVideo(color_output_frame, frame_rate=10, video_type="depth", delete_output=False),
             # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
             # ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
             #Log(transcriptions, stdout=True),

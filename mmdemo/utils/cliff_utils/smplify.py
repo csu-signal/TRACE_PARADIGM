@@ -27,14 +27,19 @@ class SMPLify():
         # Ignore the the following joints for the fitting process
         #ign_joints = ['OP Neck', 'OP RHip', 'OP LHip', 'Right Hip', 'Left Hip']
         
-        ign_joints =['OP RSmallToe',
-                     'OP RHeel',
-                     'OP LSmallToe',
-                     'OP LHeel',
-                     'Spine (H36M)',
-                     'Jaw (H36M)',
-                     'Top of Head (LSP)','Spine (H36M)']
-        
+        ign_joints =JOINT_NAMES = [ 'OP Neck',
+                                    'OP LSmallToe',
+                                    'OP LHeel',
+                                    'OP RHip', 'OP LHip', 'Right Hip', 'Left Hip',
+                                    'OP RSmallToe',
+                                    'OP RHeel',
+                                    'Neck (LSP)',
+                                    'Top of Head (LSP)',
+                                    'Pelvis (MPII)',
+                                    'Spine (H36M)',
+                                    'Jaw (H36M)',
+                                    'Head (H36M)',
+                                    ]
         self.ign_joints = [constants.JOINT_IDS[i] for i in ign_joints]
         self.num_iters = num_iters
         # GMM pose prior
@@ -150,5 +155,5 @@ class SMPLify():
         joints = smpl_output.joints.detach()
         pose = torch.cat([global_orient, body_pose], dim=-1).detach()
         betas = betas.detach()
-
-        return vertices, joints, pose, betas, camera_translation, reprojection_loss
+        faces = self.smpl.faces
+        return vertices, joints, pose, betas, camera_translation, reprojection_loss, faces

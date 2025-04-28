@@ -209,7 +209,7 @@ class CliffPose(BaseFeature[SceneInterface]):
 
     def initialize(self):
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
+        print(self.device)
          # Load the pretrained CLIFF model.
         # cliff = eval("cliff_res50")
         cliff = eval("cliff_hr48")
@@ -218,9 +218,11 @@ class CliffPose(BaseFeature[SceneInterface]):
         state_dict = torch.load(SMPL_CKPT_HR48)['model']
         state_dict = strip_prefix_if_present(state_dict, prefix="module.")
         self.cliff_model.load_state_dict(state_dict, strict=True)
+        self.cliff_model = self.cliff_model.to(self.device)
         self.cliff_model.eval()
 
         self.smpl = SMPL(constants.SMPL_MODEL_DIR, batch_size=1).to(self.device)
+        self.smplify = None
 
     def get_output(
         self,
@@ -237,7 +239,6 @@ class CliffPose(BaseFeature[SceneInterface]):
         frame = color.frame
 
         # get body tracking info (azure_keypoints)
-        start_time = time.time()
         practitioner = []
         patient = []
         bt = fix_body_id(bt)
@@ -260,13 +261,11 @@ class CliffPose(BaseFeature[SceneInterface]):
         if len(patient) == 0:
             return None
         patient_azure_keypoints = np.array(patient).reshape(32,2)
-        end_time = time.time()
-        print("Time to get body tracking= ", (end_time-start_time))
+        
         # print(patient_azure_keypoints.shape)
         # print(patient_azure_keypoints)
 
         # Camera Calibration
-        start_time = time.time()
 
         K = calibration.camera_matrix
         focal_length_value = (K[0,0] + K[1,1]) / 2.0
@@ -285,11 +284,9 @@ class CliffPose(BaseFeature[SceneInterface]):
 
         # Convert 2D keypoints to torch tensor and add batch dimension: shape (1, 49, 3)
         # keypoints = torch.from_numpy(keypoints[None]).float().to(self.device)
-        end_time = time.time()
-        print("Time to convert Azure to SMPL= ", (end_time-start_time))
+        
 
 
-        start_time = time.time()
 
         # Compute bounding box
         non_zero_mask = ~(patient_azure_keypoints == 0).any(axis=1)
@@ -314,20 +311,16 @@ class CliffPose(BaseFeature[SceneInterface]):
 
         bbox = (int(x_min), int(y_min), int(x_max), int(y_max))  # (x1, y1, x2, y2)
         #print(f"Bounding‑box (pad {pad}px):", bbox)
-        end_time = time.time()
-        print("Time to calc bounding box= ", (end_time-start_time))
         
-        start_time = time.time()
+        
         w, h = x_max - x_min, y_max - y_min   
 
         
         norm_img = self.preprocess_frame(frame, (224, 224)).to(self.device)
         focal_length = torch.tensor([focal_length_value], dtype=torch.float32, device=self.device) #500
         camera_center_tensor = torch.tensor(np.array(camera_center), dtype=torch.float32, device=self.device)
-        end_time = time.time()
-        print("Time to preprocess image= ", (end_time-start_time))
         
-        start_time = time.time()
+        
 
         # Bounding box operations
         center = torch.tensor([[(x_min + x_max)/2.0,
@@ -355,15 +348,11 @@ class CliffPose(BaseFeature[SceneInterface]):
         - 0.24 * focal_length
         ) / (0.06 * focal_length)
         bbox_info = bbox_info.float() 
-        end_time = time.time()
-        print("Time for bounding box calc= ", (end_time-start_time))
+        
         # Run CLIFF
-        start_time = time.time()
 
         with torch.no_grad():
             pred_rotmat, pred_betas, pred_cam_crop = self.cliff_model(norm_img, bbox_info)
-        end_time = time.time()
-        print("Time to get pred from CLiff= ", (end_time-start_time))
 
         
 
@@ -375,30 +364,22 @@ class CliffPose(BaseFeature[SceneInterface]):
         pred_cam_full = cam_crop2full(pred_cam_crop, center, scale, full_img_shape, focal_length)
         init_pose = transforms.matrix_to_axis_angle(pred_rotmat).contiguous().view(-1, 72)        
         
-        start_time = time.time()
+
         # Run SMPLify optimization
-        smplify = SMPLify(step_size=1e-2, batch_size=1, num_iters=100, focal_length=focal_length)
-        results = smplify(init_pose.detach(), pred_betas.detach(), pred_cam_full.detach(), camera_center_tensor, keypoints)
-        
-        new_opt_vertices, new_opt_joints, new_opt_pose, new_opt_betas, new_opt_cam_t, new_opt_joint_loss = results
-
-        end_time = time.time()
-        print("Time to process Cliff results= ", (end_time-start_time))
+        if self.smplify is None:
+            self.smplify = SMPLify(step_size=1e-2, batch_size=1, num_iters=100, focal_length=focal_length, device= self.device)
         
         start_time = time.time()
-        # Get SMPL faces and vertices
-        with torch.no_grad():
-            pred_output = self.smpl(betas=new_opt_betas,
-                            body_pose=new_opt_pose[:, 3:],global_orient=new_opt_pose[:, :3],
-                            pose2rot=True,
-                            transl=new_opt_cam_t)
-
+        
+        results = self.smplify(init_pose.detach(), pred_betas.detach(), pred_cam_full.detach(), camera_center_tensor, keypoints)
+        
         end_time = time.time()
-        print("Time to get pred from SMPL= ", (end_time-start_time))
+        print("time for simplify: ", end_time - start_time)
 
-        start_time = time.time()
-        #vertices = pred_output.vertices.cpu().detach().numpy()
-        vertices = pred_output.vertices.cpu().detach().numpy()
+        new_opt_vertices, new_opt_joints, new_opt_pose, new_opt_betas, new_opt_cam_t, new_opt_joint_loss, faces = results
+        
+
+        vertices = new_opt_vertices.cpu().detach().numpy()
         if vertices.ndim == 3:
             vertices = vertices[0]
         faces = self.smpl.faces
@@ -408,8 +389,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
         pyr_mesh = pyrender.Mesh.from_trimesh(mesh)
 
-        end_time = time.time()
-        print("Time to create pyrender mesh= ", (end_time-start_time))
+        
         # scene = pyrender.Scene()
         # scene.add(pyr_mesh)
         
