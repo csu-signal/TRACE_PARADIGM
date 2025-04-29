@@ -367,7 +367,7 @@ class CliffPose(BaseFeature[SceneInterface]):
 
         # Run SMPLify optimization
         if self.smplify is None:
-            self.smplify = SMPLify(step_size=1e-2, batch_size=1, num_iters=100, focal_length=focal_length, device= self.device)
+            self.smplify = SMPLify(step_size=1e-2, batch_size=1, num_iters=1, focal_length=focal_length, device= self.device)
         
         start_time = time.time()
         
@@ -387,27 +387,9 @@ class CliffPose(BaseFeature[SceneInterface]):
             faces = faces.cpu().numpy() if torch.is_tensor(faces) else faces
 
         mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
-        pyr_mesh = pyrender.Mesh.from_trimesh(mesh)
+        # pyr_mesh = pyrender.Mesh.from_trimesh(mesh)
 
-        
-        # scene = pyrender.Scene()
-        # scene.add(pyr_mesh)
-        
-        # # Open pyrender window
-        # viewer = pyrender.Viewer(scene, use_raymond_lighting=True)
-        
-
-        # testing info transfer
-
-        # self.sceneLock.acquire()
-        # self.sceneQueue.put(pyr_mesh)
-        # self.sceneLock.release()
-
-        # print("RGB Frame:  ", frame)
-        # print("Azure keypoints:  ", keypoints)
-        # print("camera calibration:  ", K)
-        return SceneInterface(mesh_scene=pyr_mesh) 
-        return None
+        return SceneInterface(mesh_scene=mesh) 
     
 
     def map_kinect_to_smpl(self, kinect_keypoints):
