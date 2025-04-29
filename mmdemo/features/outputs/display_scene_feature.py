@@ -1,3 +1,5 @@
+from datetime import datetime
+from pathlib import Path
 from threading import Lock
 from queue import SimpleQueue
 import random
@@ -26,13 +28,15 @@ class DisplayScene(BaseFeature[EmptyInterface]):
     def __init__(
         self,
         scene: BaseFeature[SceneInterface],
+        record: bool = False,
     ):
         super().__init__(scene)
+        self.record = record
 
     def initialize(self):
         self.window_should_be_up = False
         self.scene = pyrender.Scene()
-        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True)
+        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record})
         self.mn, self.cn, self.ln = None, None, None
 
     def get_output(
@@ -108,3 +112,13 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         return (
             self.window_should_be_up and not self.viewer.is_active
         )
+
+    def finalize(self):
+       
+       self.viewer.close_external()
+       if self.record:
+        video_name = Path(
+                f"output-video-smpl_gif-"
+                + datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S" + ".gif")
+            )
+        self.viewer.save_gif(video_name)
