@@ -15,6 +15,7 @@ wtd_inputs/
 tmp_*/
 *.mp4
 *.wav
+*.gif
 /mmdemo/features/objects/objectDetectionModels/best_model-object.pth
 /mmdemo/features/friction/wandb/
 *.pddl
