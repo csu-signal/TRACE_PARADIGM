@@ -153,9 +153,11 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self,
         scene: BaseFeature[SceneInterface],
         record: bool = False,
+        save_dir_prefix: str = None,
     ):
         super().__init__(scene)
         self.record = record
+        self.save_dir_prefix = save_dir_prefix
 
     def initialize(self):
         self.window_should_be_up = False
@@ -163,6 +165,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record})
         self.mn, self.an, self.cn, self.ln = None, None, None, None
 
+        self.current_state = 1
         self.zoom_factor = 1.0
         self.angle_x = 0.0
         self.angle_y = 0.0
@@ -186,20 +189,20 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         key = cv.waitKey(1)
         if key != -1:
             if key == ord('w'):
-                angle_x -= self.rotate_step
+                self.angle_x -= self.rotate_step
             elif key == ord('s'):
-                angle_x += self.rotate_step
+                self.angle_x += self.rotate_step
             elif key == ord('a'):
-                angle_y -= self.rotate_step
+                self.angle_y -= self.rotate_step
             elif key == ord('d'):
-                angle_y += self.rotate_step
+                self.angle_y += self.rotate_step
             elif key in [ord('+'), ord('=')]:
-                zoom_factor *= (1 - self.zoom_step)
+                self.zoom_factor *= (1 - self.zoom_step)
             elif key in [ord('-'), ord('_')]:
-                zoom_factor *= (1 + self.zoom_step)
+                self.zoom_factor *= (1 + self.zoom_step)
             elif key in [ord('1'), ord('2'), ord('3'), ord('4')]:
-                current_state = int(chr(key))
-                print(f"State changed to {current_state}")
+                self.current_state = int(chr(key))
+                print(f"State changed to {self.current_state}")
 
 
         mesh_extent = np.max(mesh.mesh_scene.bounding_box.extents)
@@ -230,8 +233,8 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         ### setting joints to be displayed
         mesh_centroid = mesh.mesh_scene.bounding_box.centroid.copy()
         joints_centered = mesh.smpl_joints - mesh_centroid
-        if current_state in STATE_CONFIG:
-            targets = STATE_CONFIG[current_state]['targets'](joints_centered)
+        if self.current_state in STATE_CONFIG:
+            targets = STATE_CONFIG[self.current_state]['targets'](joints_centered)
             for target in targets:
                 # Define a constant tail offset. Adjust this as necessary.
                 offset = np.array([0.0, -0.02, -0.4])
@@ -282,7 +285,6 @@ class DisplayScene(BaseFeature[EmptyInterface]):
        self.viewer.close_external()
        if self.record:
         video_name = Path(
-                f"output-video-smpl_gif-"
-                + datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S" + ".gif")
-            )
+                f"output/{self.save_dir_prefix}/smpl_mesh" + ".gif"
+                )
         self.viewer.save_gif(video_name)

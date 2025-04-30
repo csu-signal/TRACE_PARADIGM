@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from queue import Queue, SimpleQueue
 from threading import Lock
@@ -42,6 +43,8 @@ WTD_END_TIMES = {
 }
 
 if __name__ == "__main__":
+    save_dir_prefix = datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S")
+
     # LIVE camera settings#####################################################
     color, depth, body_tracking, calibration = create_azure_kinect_features(
         DeviceType.CAMERA, camera_index=0
@@ -76,10 +79,10 @@ if __name__ == "__main__":
     demo = Demo(
         targets=[
             DisplayFrame(color_output_frame),
-            DisplayScene(displayScene, record=True),
+            DisplayScene(displayScene, record=True, save_dir_prefix=save_dir_prefix),
             # SaveVideo(color_output_frame, frame_rate=10, video_type="depth", delete_output=False),
-            SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
-            # ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
+            SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False, save_dir_prefix=save_dir_prefix),
+            ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm", output_dir=save_dir_prefix),
             #Log(transcriptions, stdout=True),
         ]
     )

@@ -32,24 +32,27 @@ class SaveVideo(BaseFeature[EmptyInterface]):
         frame_rate=30,
         video_name: Path | None = None,
         video_type: str | None = "",
-        delete_output=True
+        delete_output=True,
+        save_dir_prefix: str | None = None,
     ):
         super().__init__(color)
 
         self.frame_rate = frame_rate
         self.video_type = video_type
         self.delete_output = delete_output
+        self.save_dir_prefix = save_dir_prefix
 
         if video_name is None:
             self.video_name = Path(
-                f"output-video-{video_type}-"
-                + datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S" + ".mp4")
-            )
+                f"output/{self.save_dir_prefix}/{video_type}" + ".mp4"
+                )
         else:
-            self.video_name = Path(video_name)
+            self.video_name = Path(
+                f"output/{self.save_dir_prefix}/{video_name}" + ".mp4"
+                )
 
     def initialize(self):
-        self.tmp_dir = create_tmp_dir_with_featureName(self.video_type)
+        self.tmp_dir = create_tmp_dir_with_featureName(self.video_type, save_dir_prefix=self.save_dir_prefix)
         self.counter = 0
 
     def finalize(self):

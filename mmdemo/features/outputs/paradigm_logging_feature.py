@@ -51,10 +51,10 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
         if self.csv:
             # create output directory
             if self._out_dir is not None:
-                self.output_dir = Path(self._out_dir)
+                self.output_dir = Path(f"output/{self._out_dir}/")
             else:
                 self.output_dir = Path(
-                    "logging-output-"
+                    "output/logging-output-"
                     + datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S")
                 )
             os.makedirs(self.output_dir, exist_ok=True)
