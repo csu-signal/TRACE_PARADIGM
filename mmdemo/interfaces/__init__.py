@@ -10,6 +10,7 @@ from dataclasses import dataclass, asdict
 import pyrender
 
 import numpy as np
+import trimesh
 
 from mmdemo.base_interface import BaseInterface
 from mmdemo.interfaces.data import Cone, Handedness, HciiObjectInfo2D, Landmarks, ObjectInfo2D, ObjectInfo3D, ParticipantInfo
@@ -36,10 +37,13 @@ class ColorImageInterface(BaseInterface):
 @dataclass
 class SceneInterface(BaseInterface):
     """
-    mesh_scene -- the scene value (pyrender.Scene)
+    mesh_scene -- the scene value (trimesh.Trimesh)
+    smpl_joints -- the joints of the SMPL model (np.ndarray)
     """
 
-    mesh_scene: pyrender.Scene
+    mesh_scene: trimesh.Trimesh
+    smpl_joints: np.ndarray
+
 
 
 @dataclass

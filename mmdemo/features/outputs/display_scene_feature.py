@@ -12,6 +12,130 @@ from mmdemo.base_feature import BaseFeature
 from mmdemo.interfaces import ColorImageInterface, EmptyInterface, SceneInterface
 import pyrender
 import numpy as np
+import trimesh
+import trimesh.transformations as tf
+
+JOINT_NAMES = [
+    # 25 OpenPose joints (in the order provided by OpenPose)
+    'OP Nose',
+    'OP Neck',
+    'OP RShoulder',
+    'OP RElbow',
+    'OP RWrist',
+    'OP LShoulder',
+    'OP LElbow',
+    'OP LWrist',
+    'OP MidHip',
+    'OP RHip',
+    'OP RKnee',
+    'OP RAnkle',
+    'OP LHip',
+    'OP LKnee',
+    'OP LAnkle',
+    'OP REye',
+    'OP LEye',
+    'OP REar',
+    'OP LEar',
+    'OP LBigToe',
+    'OP LSmallToe',
+    'OP LHeel',
+    'OP RBigToe',
+    'OP RSmallToe',
+    'OP RHeel',
+    # 24 Ground Truth joints (superset of joints from different datasets)
+    'Right Ankle',
+    'Right Knee',
+    'Right Hip',
+    'Left Hip',
+    'Left Knee',
+    'Left Ankle',
+    'Right Wrist',
+    'Right Elbow',
+    'Right Shoulder',
+    'Left Shoulder',
+    'Left Elbow',
+    'Left Wrist',
+    'Neck (LSP)',
+    'Top of Head (LSP)',
+    'Pelvis (MPII)',
+    'Thorax (MPII)',
+    'Spine (H36M)',
+    'Jaw (H36M)',
+    'Head (H36M)',
+    'Nose',
+    'Left Eye',
+    'Right Eye',
+    'Left Ear',
+    'Right Ear'
+]
+
+
+STATE_CONFIG = {
+    1: {
+        'text': "Check knees visually for redness",
+        'targets': lambda joints: [joints[JOINT_NAMES.index("OP LKnee")], joints[JOINT_NAMES.index("OP RKnee")]]  # Left and Right knees
+    },
+    2: {
+        'text': "Check for redness and swelling",
+        'targets': lambda joints: [
+            (joints[JOINT_NAMES.index("OP LKnee")] + joints[JOINT_NAMES.index("OP LAnkle")]) / 2.0,  # Left calf (midpoint between knee and ankle)
+            (joints[JOINT_NAMES.index("OP RKnee")] + joints[JOINT_NAMES.index("OP RAnkle")]) / 2.0   # Right calf (midpoint between knee and ankle)
+        ]
+    },
+    3: {
+        'text': "Check between toes",
+        'targets': lambda joints: [
+            (joints[JOINT_NAMES.index("OP LSmallToe")] + joints[JOINT_NAMES.index("OP LBigToe")]) / 2.0,  # Left toe (midpoint between big and small toe)
+            (joints[JOINT_NAMES.index("OP RSmallToe")] + joints[JOINT_NAMES.index("OP RBigToe")]) / 2.0   # Right toe (midpoint between big and small toe)
+        ]
+    },
+    4: {
+        'text': "Check for swelling",
+        'targets': lambda joints: [joints[JOINT_NAMES.index("OP RHeel")], joints[JOINT_NAMES.index("OP LHeel")]]  # Left and Right heels
+    }
+}
+
+def create_arrow(start, end, shaft_radius=0.005, head_radius=0.01, head_length=0.02, sections=20):
+    """
+    Create an arrow mesh from a start point (tail) to an end point (head) using trimesh.
+    The arrow is built from a cylinder (shaft) and a cone (head).
+    """
+    vec = end - start
+    total_length = np.linalg.norm(vec)
+    if total_length < 1e-6:
+        return None
+    direction = vec / total_length
+
+    # Reserve space for the arrow head.
+    shaft_length = max(total_length - head_length, total_length * 0.8)
+    head_length = total_length - shaft_length
+
+    # Create the shaft as a cylinder along the Z-axis.
+    shaft = trimesh.creation.cylinder(radius=shaft_radius, height=shaft_length, sections=sections)
+    shaft.apply_translation([0, 0, shaft_length / 2.0])
+
+    # Create the head as a cone along the Z-axis.
+    head = trimesh.creation.cone(radius=head_radius, height=head_length, sections=sections)
+    head.apply_translation([0, 0, shaft_length + head_length / 2.0])
+
+    # Combine shaft and head.
+    arrow = trimesh.util.concatenate([shaft, head])
+
+    # Align the arrow (default along Z) with the desired direction.
+    z_axis = np.array([0, 0, 1])
+    rot_matrix = trimesh.geometry.align_vectors(z_axis, direction)
+    if rot_matrix is None:
+        rot_matrix = np.eye(3)
+    elif rot_matrix.shape == (4, 4):
+        rot_matrix = rot_matrix[:3, :3]
+    
+    T_rot = np.eye(4)
+    T_rot[:3, :3] = rot_matrix
+    arrow.apply_transform(T_rot)
+
+    # Translate so that its base (tail) is at the start position.
+    arrow.apply_translation(start)
+    return arrow
 
 
 @final
@@ -37,7 +161,13 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.window_should_be_up = False
         self.scene = pyrender.Scene()
         self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record})
-        self.mn, self.cn, self.ln = None, None, None
+        self.mn, self.an, self.cn, self.ln = None, None, None, None
+
+        self.zoom_factor = 1.0
+        self.angle_x = 0.0
+        self.angle_y = 0.0
+        self.rotate_step = np.radians(15)
+        self.zoom_step = 0.1
 
     def get_output(
         self,
@@ -52,28 +182,40 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.window_should_be_up = True
 
         self.viewer.render_lock.acquire()
-        # self.scene.clear()
 
-        zoom_factor = 1.0
-        angle_x = 0.0
-        angle_y = 0.0
-        rotate_step = np.radians(15)
-        zoom_step = 0.1
+        key = cv.waitKey(1)
+        if key != -1:
+            if key == ord('w'):
+                angle_x -= self.rotate_step
+            elif key == ord('s'):
+                angle_x += self.rotate_step
+            elif key == ord('a'):
+                angle_y -= self.rotate_step
+            elif key == ord('d'):
+                angle_y += self.rotate_step
+            elif key in [ord('+'), ord('=')]:
+                zoom_factor *= (1 - self.zoom_step)
+            elif key in [ord('-'), ord('_')]:
+                zoom_factor *= (1 + self.zoom_step)
+            elif key in [ord('1'), ord('2'), ord('3'), ord('4')]:
+                current_state = int(chr(key))
+                print(f"State changed to {current_state}")
+
 
         mesh_extent = np.max(mesh.mesh_scene.bounding_box.extents)
         base_distance = mesh_extent * 2.5
-        camera_distance = base_distance * zoom_factor
+        camera_distance = base_distance * self.zoom_factor
 
         R_x = np.array([
             [1, 0, 0, 0],
-            [0, np.cos(angle_x), -np.sin(angle_x), 0],
-            [0, np.sin(angle_x), np.cos(angle_x), 0],
+            [0, np.cos(self.angle_x), -np.sin(self.angle_x), 0],
+            [0, np.sin(self.angle_x), np.cos(self.angle_x), 0],
             [0, 0, 0, 1]
         ])
         R_y = np.array([
-            [np.cos(angle_y), 0, np.sin(angle_y), 0],
+            [np.cos(self.angle_y), 0, np.sin(self.angle_y), 0],
             [0, 1, 0, 0],
-            [-np.sin(angle_y), 0, np.cos(angle_y), 0],
+            [-np.sin(self.angle_y), 0, np.cos(self.angle_y), 0],
             [0, 0, 0, 1]
         ])
         T = np.array([
@@ -83,25 +225,47 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             [0, 0, 0, 1]
         ])
         cam_pose = R_y @ R_x @ T
+        R_flip = tf.rotation_matrix(2*np.pi, [1, 1, 0])
+
+        ### setting joints to be displayed
+        mesh_centroid = mesh.mesh_scene.bounding_box.centroid.copy()
+        joints_centered = mesh.smpl_joints - mesh_centroid
+        if current_state in STATE_CONFIG:
+            targets = STATE_CONFIG[current_state]['targets'](joints_centered)
+            for target in targets:
+                # Define a constant tail offset. Adjust this as necessary.
+                offset = np.array([0.0, -0.02, -0.4])
+                head_offset = np.array([0.0, 0.0, -0.1])
+                target = target +head_offset
+                tail = target + offset
+
+                arrow_mesh = create_arrow(tail, target,  shaft_radius=0.01,head_radius=0.03, head_length=0.08)
+                if arrow_mesh is not None:
+                    arrow_material = pyrender.MetallicRoughnessMaterial(baseColorFactor=(1.0, 0.0, 0.0, 1.0))
+                    arrow_mesh.apply_transform(R_flip)
+                    arrow_pyrender = pyrender.Mesh.from_trimesh(arrow_mesh, material=arrow_material, smooth=False)
+
 
         mesh_pyrender = pyrender.Mesh.from_trimesh(mesh.mesh_scene)
         camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
-        # scene.add(camera_obj, pose=cam_pose)
         light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
-        # scene.add(light, pose=cam_pose)
-        # scene = pyrender.Scene()
 
         if self.mn is not None:
             self.scene.remove_node(self.mn)
+            self.scene.remove_node(self.an)
             self.scene.remove_node(self.cn)
             self.scene.remove_node(self.ln)
 
         self.mn = pyrender.Node(mesh=mesh_pyrender)
         self.cn = pyrender.Node(camera=camera_obj)
         self.ln = pyrender.Node(light=light)
+        self.an = pyrender.Node(mesh=arrow_pyrender)
         self.scene.add_node(self.mn)
+        self.scene.add_node(self.an)
         self.scene.add_node(self.cn)
+        self.scene.set_pose(self.cn, cam_pose)
         self.scene.add_node(self.ln)
+        self.scene.set_pose(self.ln, cam_pose)
 
         self.viewer.render_lock.release()
 

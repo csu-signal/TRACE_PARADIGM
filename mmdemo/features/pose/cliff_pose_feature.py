@@ -224,6 +224,8 @@ class CliffPose(BaseFeature[SceneInterface]):
         self.smpl = SMPL(constants.SMPL_MODEL_DIR, batch_size=1).to(self.device)
         self.smplify = None
 
+        self.bbox_info = None
+
     def get_output(
         self,
         color: ColorImageInterface,
@@ -235,7 +237,6 @@ class CliffPose(BaseFeature[SceneInterface]):
             return None
 
         # getting RGB image 
-        print("#################\n##############\n\n")
         frame = color.frame
 
         # get body tracking info (azure_keypoints)
@@ -262,16 +263,12 @@ class CliffPose(BaseFeature[SceneInterface]):
             return None
         patient_azure_keypoints = np.array(patient).reshape(32,2)
         
-        # print(patient_azure_keypoints.shape)
-        # print(patient_azure_keypoints)
-
         # Camera Calibration
 
         K = calibration.camera_matrix
         focal_length_value = (K[0,0] + K[1,1]) / 2.0
         camera_center = np.array([960, 540])
 
-        # print(frame, "\n\n\n", K)
         # MAP from Kinect to openpose sequence of joints
 
         xy = self.map_kinect_to_smpl(patient_azure_keypoints)
@@ -280,13 +277,6 @@ class CliffPose(BaseFeature[SceneInterface]):
         
         kpts        = smpl_kpts[None].astype(np.float32)    # (1, 49, 3)
         keypoints   = torch.from_numpy(kpts).to(self.device)
-        # print(f"keypoints shape = {keypoints.shape}")
-
-        # Convert 2D keypoints to torch tensor and add batch dimension: shape (1, 49, 3)
-        # keypoints = torch.from_numpy(keypoints[None]).float().to(self.device)
-        
-
-
 
         # Compute bounding box
         non_zero_mask = ~(patient_azure_keypoints == 0).any(axis=1)
@@ -309,7 +299,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         x_max = np.clip(x_max, 0, img_w - 1)
         y_max = np.clip(y_max, 0, img_h - 1)
 
-        bbox = (int(x_min), int(y_min), int(x_max), int(y_max))  # (x1, y1, x2, y2)
+        # bbox = (int(x_min), int(y_min), int(x_max), int(y_max))  # (x1, y1, x2, y2)
         #print(f"Bounding‑box (pad {pad}px):", bbox)
         
         
@@ -369,12 +359,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         if self.smplify is None:
             self.smplify = SMPLify(step_size=1e-2, batch_size=1, num_iters=1, focal_length=focal_length, device= self.device)
         
-        start_time = time.time()
-        
         results = self.smplify(init_pose.detach(), pred_betas.detach(), pred_cam_full.detach(), camera_center_tensor, keypoints)
-        
-        end_time = time.time()
-        print("time for simplify: ", end_time - start_time)
 
         new_opt_vertices, new_opt_joints, new_opt_pose, new_opt_betas, new_opt_cam_t, new_opt_joint_loss, faces = results
         
@@ -386,10 +371,12 @@ class CliffPose(BaseFeature[SceneInterface]):
         if not isinstance(faces, np.ndarray):
             faces = faces.cpu().numpy() if torch.is_tensor(faces) else faces
 
-        mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+        body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
         # pyr_mesh = pyrender.Mesh.from_trimesh(mesh)
 
-        return SceneInterface(mesh_scene=mesh) 
+        smpl_joints = new_opt_joints.cpu().detach().numpy()[0]  # shape (num_joints, 3)
+
+        return SceneInterface(mesh_scene=body_mesh, smpl_joints=smpl_joints,) 
     
 
     def map_kinect_to_smpl(self, kinect_keypoints):
