@@ -3,6 +3,7 @@ from pathlib import Path
 from queue import Queue, SimpleQueue
 from threading import Lock
 from mmdemo.features.gesture.gesture_landmark_feature import GestureLandmarks
+from mmdemo.features.outputs.depth_frame_feature import DepthFrame
 from mmdemo.features.outputs.display_frame_feature import DisplayFrame
 from mmdemo.features.outputs.emnlp_frame_feature import EMNLPFrame
 from mmdemo.features.outputs.paradigm_frame_feature import ParadigmFrame
@@ -74,11 +75,13 @@ if __name__ == "__main__":
         calibration=calibration,
         landmarks = False
     )
+    depth_output_frame = depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=True)
     
     # run demo and show output
     demo = Demo(
         targets=[
             DisplayFrame(color_output_frame),
+            DisplayFrame(depth_output_frame),
             DisplayScene(displayScene, record=True, save_dir_prefix=save_dir_prefix),
             # SaveVideo(color_output_frame, frame_rate=10, video_type="depth", delete_output=False),
             SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False, save_dir_prefix=save_dir_prefix),
