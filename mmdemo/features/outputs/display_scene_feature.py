@@ -138,6 +138,8 @@ def create_arrow(start, end, shaft_radius=0.005, head_radius=0.01, head_length=0
     return arrow
 
 
+
+
 @final
 class DisplayScene(BaseFeature[EmptyInterface]):
     """
@@ -159,10 +161,27 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.record = record
         self.save_dir_prefix = save_dir_prefix
 
+
+    def _increase_x_rotation(self):
+        self.angle_x += self.rotate_step
+    def _decrease_x_rotation(self):
+        self.angle_x -= self.rotate_step
+    def _increase_y_rotation(self):
+        self.angle_y += self.rotate_step
+    def _decrease_y_rotation(self):
+        self.angle_y -= self.rotate_step
+
+    def _increase_zoom(self):
+        self.zoom_factor *= (1 - self.zoom_step)
+    def _decrease_zoom(self):
+        self.zoom_factor *= (1 + self.zoom_step)
+    
+    def _state_change(self, key):
+        self.current_state = int(chr(key))
+
     def initialize(self):
         self.window_should_be_up = False
-        self.scene = pyrender.Scene()
-        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record})
+        
         self.mn, self.an, self.cn, self.ln = None, None, None, None
 
         self.current_state = 1
@@ -171,6 +190,22 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.angle_y = 0.0
         self.rotate_step = np.radians(15)
         self.zoom_step = 0.1
+
+        # _registered_keys = {
+        #     "w": lambda: self._increase_x_rotation(),
+        #     "s": (self._decrease_x_rotation, [self]),
+        #     "a": (self._decrease_y_rotation, [self]),
+        #     "d": (self._increase_y_rotation, [self]),
+        #     "=": (self._increase_zoom, [self]),
+        #     "-": (self._decrease_zoom, [self]),
+        #     "1": (self._state_change, [self, "1"]),
+        #     "2": (self._state_change, [self], "2"),
+        #     "3": (self._state_change, [self], "3"),
+        #     "4": (self._state_change, [self], "4")
+        # }
+
+        self.scene = pyrender.Scene()
+        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record},)
 
     def get_output(
         self,
@@ -186,23 +221,23 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         self.viewer.render_lock.acquire()
 
-        key = cv.waitKey(1)
-        if key != -1:
-            if key == ord('w'):
-                self.angle_x -= self.rotate_step
-            elif key == ord('s'):
-                self.angle_x += self.rotate_step
-            elif key == ord('a'):
-                self.angle_y -= self.rotate_step
-            elif key == ord('d'):
-                self.angle_y += self.rotate_step
-            elif key in [ord('+'), ord('=')]:
-                self.zoom_factor *= (1 - self.zoom_step)
-            elif key in [ord('-'), ord('_')]:
-                self.zoom_factor *= (1 + self.zoom_step)
-            elif key in [ord('1'), ord('2'), ord('3'), ord('4')]:
-                self.current_state = int(chr(key))
-                print(f"State changed to {self.current_state}")
+        # key = cv.waitKey(1)
+        # if key != -1:
+        #     if key == ord('w'):
+        #         self.angle_x -= self.rotate_step
+        #     elif key == ord('s'):
+        #         self.angle_x += self.rotate_step
+        #     elif key == ord('a'):
+        #         self.angle_y -= self.rotate_step
+        #     elif key == ord('d'):
+        #         self.angle_y += self.rotate_step
+        #     elif key in [ord('+'), ord('=')]:
+        #         self.zoom_factor *= (1 - self.zoom_step)
+        #     elif key in [ord('-'), ord('_')]:
+        #         self.zoom_factor *= (1 + self.zoom_step)
+        #     elif key in [ord('1'), ord('2'), ord('3'), ord('4')]:
+        #         self.current_state = int(chr(key))
+        #         print(f"State changed to {self.current_state}")
 
 
         mesh_extent = np.max(mesh.mesh_scene.bounding_box.extents)

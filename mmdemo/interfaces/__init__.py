@@ -43,6 +43,7 @@ class SceneInterface(BaseInterface):
 
     mesh_scene: trimesh.Trimesh
     smpl_joints: np.ndarray
+    probe_centroid: np.ndarray
 
 
 

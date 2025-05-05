@@ -112,13 +112,13 @@ class MaxMixturePrior(nn.Module):
         else:
             print('Unknown float type {}, exiting!'.format(dtype))
             sys.exit(-1)
-
+        curr_dir = os.path.dirname(os.path.abspath(__file__))
         self.num_gaussians = num_gaussians
         self.epsilon = epsilon
         self.use_merged = use_merged
         gmm_fn = 'gmm_{:02d}.pkl'.format(num_gaussians)
 
-        full_gmm_fn = os.path.join(prior_folder, gmm_fn)
+        full_gmm_fn = os.path.join(curr_dir, prior_folder, gmm_fn)
         if not os.path.exists(full_gmm_fn):
             print('The path to the mixture prior "{}"'.format(full_gmm_fn) +
                   ' does not exist, exiting!')
