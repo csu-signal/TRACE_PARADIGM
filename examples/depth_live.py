@@ -51,21 +51,21 @@ WTD_END_TIMES = {
 
 if __name__ == "__main__":
     # LIVE camera settings#####################################################
-    color, depth, body_tracking, calibration = create_azure_kinect_features(
-        DeviceType.CAMERA, camera_index=0
-    )
+    # color, depth, body_tracking, calibration = create_azure_kinect_features(
+    #     DeviceType.CAMERA, camera_index=0
+    # )
     ############################################################################
 
     # POST process entry settings (for development/debugging)##################
-    # group = 1
+    group = 1
 
-    # # load azure kinect features from file
-    # color, depth, body_tracking, calibration = create_azure_kinect_features(
-    #     DeviceType.PLAYBACK,
-    #     mkv_path=Path(WTD_MKV_PATH.format(group)),
-    #     playback_end_seconds=WTD_END_TIMES[group],
-    #     playback_frame_rate=PLAYBACK_FRAME_RATE,
-    # )
+    # load azure kinect features from file
+    color, depth, body_tracking, calibration = create_azure_kinect_features(
+        DeviceType.PLAYBACK,
+        mkv_path=Path(WTD_MKV_PATH.format(group)),
+        playback_end_seconds=WTD_END_TIMES[group],
+        playback_frame_rate=PLAYBACK_FRAME_RATE,
+    )
     ############################################################################
 
     gesture = GestureLandmarks(color, depth, body_tracking, calibration)
