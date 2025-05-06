@@ -299,9 +299,9 @@ class CliffPose(BaseFeature[SceneInterface]):
 
         # Get translation for SMPL
         # try:
-        # pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
+        pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
         # print("pelvis", pelvis_translation)
-        pelvis_translation = None
+        # pelvis_translation = None
         # except Exception as e:
         #     print(e)
         #     pelvis_translation = None
