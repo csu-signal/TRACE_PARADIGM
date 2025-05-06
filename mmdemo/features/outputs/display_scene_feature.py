@@ -181,8 +181,14 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
     def initialize(self):
         self.window_should_be_up = False
-        
-        self.mn, self.an, self.cn, self.ln = None, None, None, None
+        '''
+        self.mn => patient's body mesh node
+        self.an => arrow mesh node pointing to some body part
+        self.cn => camera mesh node
+        self.ln => lighting mesh node
+        self.pn => US probe centroid's node
+        '''
+        self.mn, self.an, self.cn, self.ln, self.pn = None, None, None, None, None
 
         self.current_state = 1
         self.zoom_factor = 1.0
@@ -204,8 +210,18 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         #     "4": (self._state_change, [self], "4")
         # }
 
+        # axis_trimesh = trimesh.creation.axis(
+        #     origin_size = 0.03,     # little cube at the origin
+        #     axis_length = 0.3)      # length of each arrow (metres)
+
+        # axis_mesh = pyrender.Mesh.from_trimesh(axis_trimesh, smooth=False)
+        # axis_node = pyrender.Node(mesh=axis_mesh)
+
         self.scene = pyrender.Scene()
+        # self.scene.add_node(axis_node)
+        # self.scene.set_pose(axis_node, np.eye(4))
         self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record},)
+
 
     def get_output(
         self,
@@ -293,6 +309,8 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             self.scene.remove_node(self.an)
             self.scene.remove_node(self.cn)
             self.scene.remove_node(self.ln)
+        if self.scene.has_node(self.pn):
+            self.scene.remove_node(self.pn)
 
         self.mn = pyrender.Node(mesh=mesh_pyrender)
         self.cn = pyrender.Node(camera=camera_obj)
@@ -304,6 +322,25 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.scene.set_pose(self.cn, cam_pose)
         self.scene.add_node(self.ln)
         self.scene.set_pose(self.ln, cam_pose)
+
+        if mesh.probe_centroid is not None:
+            print("probe is detected", mesh.probe_centroid)
+            sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=10)
+            sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
+            sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=False)
+            self.pn = pyrender.Node(sphere)
+            self.scene.add_node(self.pn)
+            self.scene.set_pose(self.pn, np.eye(4))
+            self.scene.set_pose(self.pn, np.block([
+                [np.eye(3), mesh.probe_centroid.reshape(3,1)],
+                [np.zeros((1,3)), 1]
+            ]))
+            # self.pn = self.scene.add(sphere, pose=np.eye(4))          # identity pose
+            # self.scene.set_pose(self.pn, )
+            # print()
+        # else:
+        #     print("probe is not detected")
+        #     self.pn = None
 
         self.viewer.render_lock.release()
 

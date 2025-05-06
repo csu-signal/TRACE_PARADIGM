@@ -75,7 +75,7 @@ if __name__ == "__main__":
         calibration=calibration,
         landmarks = False
     )
-    depth_output_frame = depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=True)
+    depth_output_frame = depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=False)
     
     # run demo and show output
     demo = Demo(
@@ -83,9 +83,9 @@ if __name__ == "__main__":
             DisplayFrame(color_output_frame),
             DisplayFrame(depth_output_frame),
             DisplayScene(displayScene, record=True, save_dir_prefix=save_dir_prefix),
-            # SaveVideo(color_output_frame, frame_rate=10, video_type="depth", delete_output=False),
+            SaveVideo(depth_output_frame, frame_rate=10, video_type="depth", delete_output=False, save_dir_prefix=save_dir_prefix),
             SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False, save_dir_prefix=save_dir_prefix),
-            ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm", output_dir=save_dir_prefix),
+            # ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm", output_dir=save_dir_prefix),
             #Log(transcriptions, stdout=True),
         ]
     )

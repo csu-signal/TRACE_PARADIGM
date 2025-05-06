@@ -45,9 +45,11 @@ def get_pelvis_translation(pelvis_xy, depth_m, K, device="cuda"):
 def get_probe_centroid(frame, depth_m, K):
     mask        = rgb_hsv_mask(frame)
     centroid_uv = centroid_px(mask)
+    print("centroid_uv", centroid_uv)
     centroid_3d = None
     if centroid_uv is not None:
         centroid_3d = px_to_cam(centroid_uv, depth_m, K)
+        print("centroid_3d", centroid_3d)
     return centroid_3d
 
 def depth_scaled_metric(depth_u8, near=0.5, far=5.46, offset=0.3):

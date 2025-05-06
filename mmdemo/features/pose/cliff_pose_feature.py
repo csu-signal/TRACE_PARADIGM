@@ -279,11 +279,11 @@ class CliffPose(BaseFeature[SceneInterface]):
         depth_frame = depth.frame
         # print(depth_frame.shape)
         # np.save("./original-depth-frame.npz", depth_frame)
-        depth_image_8bit = cv.normalize(depth_frame, None, 0, 255, )
+        # depth_image_8bit = cv.normalize(depth_frame, None, 0, 255, )
         # np.save("./normalized-depth-frame.npz", depth_image_8bit)
 
         # depth_frame = cv.applyColorMap(depth_image_8bit, cv.IMREAD_GRAYSCALE)
-        depth_map = depth_scaled_metric(depth_image_8bit, near = 0.5, far = 5.5, offset = 0.3)
+        depth_map = depth_scaled_metric(depth_frame, near = 0.5, far = 5.5, offset = 0.3)
         # np.save("./resulting-depth-map.npz", depth_map)
         # print(depth_image_8bit.shape, depth_map.shape,)
 
@@ -299,7 +299,9 @@ class CliffPose(BaseFeature[SceneInterface]):
 
         # Get translation for SMPL
         # try:
-        pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
+        # pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
+        # print("pelvis", pelvis_translation)
+        pelvis_translation = None
         # except Exception as e:
         #     print(e)
         #     pelvis_translation = None
@@ -319,10 +321,10 @@ class CliffPose(BaseFeature[SceneInterface]):
         
 
         # Get 3D coordinates of probe centroid
-        try:
-            centroid_3d = get_probe_centroid(frame, depth_map, K)        
-        except:
-            centroid_3d = None
+        # try:
+        centroid_3d = get_probe_centroid(frame, depth_map, K)        
+        # except:
+        #     centroid_3d = None
         # Get proprocessing data for CLIFF 
         # For debuggin visualize crop_img to check the image fed to CLIFF
         norm_img, center, scale, ul, br, crop_img, bbox_info, b = preprocess_crop(frame, bbox, crop_height=224, crop_width=224, camera_center=camera_center, focal_length=focal_length, device=self.device)
@@ -362,7 +364,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         
         body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
         smpl_joints = new_opt_joints.cpu().detach().numpy()[0]  # shape (num_joints, 3)
-
+        # print(centroid_3d)
         return SceneInterface(mesh_scene=body_mesh, smpl_joints=smpl_joints, probe_centroid=centroid_3d) 
     
 
