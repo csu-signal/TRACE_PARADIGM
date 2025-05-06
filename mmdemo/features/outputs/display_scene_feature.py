@@ -138,6 +138,22 @@ def create_arrow(start, end, shaft_radius=0.005, head_radius=0.01, head_length=0
     return arrow
 
 
+def _increase_x_rotation(ds):
+    ds.angle_x += ds.rotate_step
+def _decrease_x_rotation(ds):
+    ds.angle_x -= ds.rotate_step
+def _increase_y_rotation(ds):
+    ds.angle_y += ds.rotate_step
+def _decrease_y_rotation(ds):
+    ds.angle_y -= ds.rotate_step
+
+def _increase_zoom(ds):
+    ds.zoom_factor *= (1 - ds.zoom_step)
+def _decrease_zoom(ds):
+    ds.zoom_factor *= (1 + ds.zoom_step)
+
+def _state_change(ds, key):
+    ds.current_state = int(chr(key))
 
 
 @final
@@ -162,22 +178,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.save_dir_prefix = save_dir_prefix
 
 
-    def _increase_x_rotation(self):
-        self.angle_x += self.rotate_step
-    def _decrease_x_rotation(self):
-        self.angle_x -= self.rotate_step
-    def _increase_y_rotation(self):
-        self.angle_y += self.rotate_step
-    def _decrease_y_rotation(self):
-        self.angle_y -= self.rotate_step
-
-    def _increase_zoom(self):
-        self.zoom_factor *= (1 - self.zoom_step)
-    def _decrease_zoom(self):
-        self.zoom_factor *= (1 + self.zoom_step)
     
-    def _state_change(self, key):
-        self.current_state = int(chr(key))
 
     def initialize(self):
         self.window_should_be_up = False
@@ -197,18 +198,18 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.rotate_step = np.radians(15)
         self.zoom_step = 0.1
 
-        # _registered_keys = {
-        #     "w": lambda: self._increase_x_rotation(),
-        #     "s": (self._decrease_x_rotation, [self]),
-        #     "a": (self._decrease_y_rotation, [self]),
-        #     "d": (self._increase_y_rotation, [self]),
-        #     "=": (self._increase_zoom, [self]),
-        #     "-": (self._decrease_zoom, [self]),
-        #     "1": (self._state_change, [self, "1"]),
-        #     "2": (self._state_change, [self], "2"),
-        #     "3": (self._state_change, [self], "3"),
-        #     "4": (self._state_change, [self], "4")
-        # }
+        _registered_keys = {
+            "w": lambda _ : _increase_x_rotation(self),
+            "s": lambda _ : _decrease_x_rotation(self),
+            "a": lambda _ : _decrease_y_rotation(self),
+            "d": lambda _ : _increase_y_rotation(self),
+            "=": lambda _ : _increase_zoom(self),
+            "-": lambda _ : _decrease_zoom(self),
+            "1": lambda _ : _state_change(self, "1"),
+            "2": lambda _ : _state_change(self, "2"),
+            "3": lambda _ : _state_change(self, "3"),
+            "4": lambda _ : _state_change(self, "4")
+        }
 
         # axis_trimesh = trimesh.creation.axis(
         #     origin_size = 0.03,     # little cube at the origin
@@ -220,7 +221,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.scene = pyrender.Scene()
         # self.scene.add_node(axis_node)
         # self.scene.set_pose(axis_node, np.eye(4))
-        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record},)
+        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record}, registered_keys=_registered_keys)
 
 
     def get_output(
@@ -236,24 +237,6 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.window_should_be_up = True
 
         self.viewer.render_lock.acquire()
-
-        # key = cv.waitKey(1)
-        # if key != -1:
-        #     if key == ord('w'):
-        #         self.angle_x -= self.rotate_step
-        #     elif key == ord('s'):
-        #         self.angle_x += self.rotate_step
-        #     elif key == ord('a'):
-        #         self.angle_y -= self.rotate_step
-        #     elif key == ord('d'):
-        #         self.angle_y += self.rotate_step
-        #     elif key in [ord('+'), ord('=')]:
-        #         self.zoom_factor *= (1 - self.zoom_step)
-        #     elif key in [ord('-'), ord('_')]:
-        #         self.zoom_factor *= (1 + self.zoom_step)
-        #     elif key in [ord('1'), ord('2'), ord('3'), ord('4')]:
-        #         self.current_state = int(chr(key))
-        #         print(f"State changed to {self.current_state}")
 
 
         mesh_extent = np.max(mesh.mesh_scene.bounding_box.extents)
@@ -325,7 +308,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         if mesh.probe_centroid is not None:
             print("probe is detected", mesh.probe_centroid)
-            sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=10)
+            sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=0.05)
             sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
             sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=False)
             self.pn = pyrender.Node(sphere)
@@ -335,12 +318,6 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 [np.eye(3), mesh.probe_centroid.reshape(3,1)],
                 [np.zeros((1,3)), 1]
             ]))
-            # self.pn = self.scene.add(sphere, pose=np.eye(4))          # identity pose
-            # self.scene.set_pose(self.pn, )
-            # print()
-        # else:
-        #     print("probe is not detected")
-        #     self.pn = None
 
         self.viewer.render_lock.release()
 
