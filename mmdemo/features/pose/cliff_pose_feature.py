@@ -277,13 +277,8 @@ class CliffPose(BaseFeature[SceneInterface]):
         # getting RGB image and depth images
         frame = color.frame
         depth_frame = depth.frame
-        # print(depth_frame.shape)
-        # np.save("./original-depth-frame.npz", depth_frame)
-        # depth_image_8bit = cv.normalize(depth_frame, None, 0, 255, )
-        # np.save("./normalized-depth-frame.npz", depth_image_8bit)
-
-        # depth_frame = cv.applyColorMap(depth_image_8bit, cv.IMREAD_GRAYSCALE)
-        depth_map = depth_scaled_metric(depth_frame, near = 0.5, far = 5.5, offset = 0.3)
+        depth_map = depth_frame/1000.0
+        # depth_map = depth_scaled_metric(depth_frame, near = 0.5, far = 5.5, offset = 0.3)
         # np.save("./resulting-depth-map.npz", depth_map)
         # print(depth_image_8bit.shape, depth_map.shape,)
 
