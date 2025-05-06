@@ -258,7 +258,7 @@ class CliffPose(BaseFeature[SceneInterface]):
             bodyId = int(body["wtd_body_id"])
             for jointIndex, joint in enumerate(body["joint_positions"]):
                 points2D, _ = cv.projectPoints(
-                    np.array(joint), 
+                    np.array(joint[:3]), 
                     calibration.rotation,
                     calibration.translation,
                     calibration.camera_matrix,
@@ -283,7 +283,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         # np.save("./normalized-depth-frame.npz", depth_image_8bit)
 
         # depth_frame = cv.applyColorMap(depth_image_8bit, cv.IMREAD_GRAYSCALE)
-        depth_map = depth_scaled_metric(depth_image_8bit, near = 0.5, far = 5.5, offset = 0.3)[0]
+        depth_map = depth_scaled_metric(depth_image_8bit, near = 0.5, far = 5.5, offset = 0.3)
         # np.save("./resulting-depth-map.npz", depth_map)
         # print(depth_image_8bit.shape, depth_map.shape,)
 
@@ -298,10 +298,11 @@ class CliffPose(BaseFeature[SceneInterface]):
         keypoints = process_keypoints(patient_azure_keypoints)
 
         # Get translation for SMPL
-        try:
-            pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
-        except:
-            pelvis_translation = None
+        # try:
+        pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
+        # except Exception as e:
+        #     print(e)
+        #     pelvis_translation = None
         # Compute bounding box
         img_w=1920.0
         img_h=1080.0

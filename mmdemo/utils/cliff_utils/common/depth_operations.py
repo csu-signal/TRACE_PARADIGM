@@ -36,6 +36,8 @@ def get_pelvis_translation(pelvis_xy, depth_m, K, device="cuda"):
     u_pelvis, v_pelvis = pelvis_xy.astype(int)
     pelvis_depth = depth_m[v_pelvis, u_pelvis]     
     pelvis_3d_coord = px_to_cam([u_pelvis, v_pelvis], depth_m, K)
+    if pelvis_3d_coord is None:
+        return None
     pelv_x, pelv_y, pelv_z =pelvis_3d_coord
     pelvis_translation = torch.tensor([[pelv_x, pelv_y, pelv_z]], dtype=torch.float32, device=device)
     return pelvis_translation
