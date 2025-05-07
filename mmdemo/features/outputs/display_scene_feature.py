@@ -14,6 +14,8 @@ import pyrender
 import numpy as np
 import trimesh
 import trimesh.transformations as tf
+from pyrender.constants import TextAlign
+
 
 JOINT_NAMES = [
     # 25 OpenPose joints (in the order provided by OpenPose)
@@ -156,6 +158,32 @@ def _state_change(ds, key):
     ds.current_state = int(chr(key))
 
 
+
+class ProximityTracker:
+    def __init__(self, num_leg_keypoints, radius):
+        self.radius_squared = radius ** 2
+        self.num_leg_keypoints = num_leg_keypoints
+        self.proximity_counts = np.zeros(num_leg_keypoints, dtype=int)
+
+    def update(self, probe_position, leg_keypoints):
+        """
+        Update proximity counts using a new frame.
+        
+        Args:
+            probe_position: (x, y, z) tuple or np.array
+            leg_keypoints: list or np.array of shape (num_keypoints, 3)
+        """
+
+        deltas = np.array(leg_keypoints) - np.array(probe_position)
+        distances_squared = np.sum(deltas ** 2, axis=1)
+        close = distances_squared < self.radius_squared
+
+        self.proximity_counts += close.astype(int)
+
+    def get_counts(self):
+        return dict(enumerate(self.proximity_counts))
+
+
 @final
 class DisplayScene(BaseFeature[EmptyInterface]):
     """
@@ -176,6 +204,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         super().__init__(scene)
         self.record = record
         self.save_dir_prefix = save_dir_prefix
+        self.proximity_tracker = ProximityTracker(3, 0.1)
 
 
     
@@ -219,9 +248,16 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         # axis_node = pyrender.Node(mesh=axis_mesh)
 
         self.scene = pyrender.Scene()
+        self.caption = caption = [dict(
+            text     = STATE_CONFIG[self.current_state]['text'],
+            location = TextAlign.TOP_CENTER,
+            font_name = r"C:\Windows\Fonts\arial.ttf",
+            font_pt   = 30,
+            color    = (0.,1.,0.,1.),
+            scale    = 1.0)]
         # self.scene.add_node(axis_node)
         # self.scene.set_pose(axis_node, np.eye(4))
-        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record}, registered_keys=_registered_keys)
+        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption }, registered_keys=_registered_keys)
 
 
     def get_output(
@@ -282,7 +318,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                     arrow_mesh.apply_transform(R_flip)
                     arrow_pyrender = pyrender.Mesh.from_trimesh(arrow_mesh, material=arrow_material, smooth=False)
 
-
+        mesh.mesh_scene.apply_transform(R_flip)
         mesh_pyrender = pyrender.Mesh.from_trimesh(mesh.mesh_scene)
         camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
         light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
@@ -318,6 +354,12 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 [np.eye(3), mesh.probe_centroid.reshape(3,1)],
                 [np.zeros((1,3)), 1]
             ]))
+
+        # update the tracker
+
+            self.proximity_tracker.update(mesh.probe_centroid, [(12, 2, 1), (2,5,1), (6,77,3)])
+
+            self.viewer.viewer_flags['caption'][0]['text'] = f"{self.proximity_tracker.get_counts()}"
 
         self.viewer.render_lock.release()
 
