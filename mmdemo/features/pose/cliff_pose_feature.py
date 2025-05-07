@@ -41,7 +41,7 @@ from mmdemo.utils.cliff_utils.models.cliff_hr48.cliff import CLIFF as cliff_hr48
 from mmdemo.utils.cliff_utils.models.cliff_res50.cliff import CLIFF as cliff_res50 
 from mmdemo.utils.cliff_utils.common.imutils import process_image
 
-from mmdemo.utils.cliff_utils.common.depth_operations import px_to_cam, get_pelvis_translation, get_probe_centroid, depth_scaled_metric
+from mmdemo.utils.cliff_utils.common.depth_operations import px_to_cam, get_pelvis_translation, get_probe_centroid, depth_scaled_metric, smpl_fix_coordinates
 from mmdemo.utils.cliff_utils.common.scene_operations import rgb_hsv_mask, centroid_px, add_reference_frame, add_prob_centroid2scene
 from mmdemo.utils.cliff_utils.common.smpl_fitting_ops import refine_smpl, smpl_skip_refinement
 from mmdemo.utils.cliff_utils.common.preprocessing_operations import map_kinect_to_smpl, process_keypoints, get_crop_cam, preprocess_crop, compute_bbox_full_scale
@@ -295,12 +295,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         # Get translation for SMPL
         # try:
         pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
-        # print("pelvis", pelvis_translation)
-        # pelvis_translation = None
-        # except Exception as e:
-        #     print(e)
-        #     pelvis_translation = None
-        # Compute bounding box
+
         img_w=1920.0
         img_h=1080.0
         bbox, w, h = compute_bbox_full_scale(patient_azure_keypoints, img_w, img_h)
@@ -330,7 +325,7 @@ class CliffPose(BaseFeature[SceneInterface]):
 
         # Run CLIFF
         with torch.no_grad():
-            pred_rotmat, betas, pred_cam_crop = self.cliff_model(norm_img, bbox_info,init_cam=init_cam, n_iter=5)
+            pred_rotmat, betas, pred_cam_crop = self.cliff_model(norm_img, bbox_info, n_iter=5)
 
         # Use data_full_cam if using translation data from Kinect
         data_full_cam = torch.tensor([[kinect_translation[0]/1000,  -kinect_translation[1]/1000, kinect_translation[2]]], dtype=torch.float32, device=self.device)
@@ -350,6 +345,8 @@ class CliffPose(BaseFeature[SceneInterface]):
             num_iters=5,
             device=self.device)
 
+        new_opt_vertices, new_joints = smpl_fix_coordinates(new_opt_vertices,new_opt_joints, pelvis_translation)
+
         vertices = new_opt_vertices.cpu().detach().numpy()
         if vertices.ndim == 3:
             vertices = vertices[0]
@@ -358,9 +355,9 @@ class CliffPose(BaseFeature[SceneInterface]):
         
         
         body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
-        smpl_joints = new_opt_joints.cpu().detach().numpy()[0]  # shape (num_joints, 3)
+        smpl_joints = new_joints.cpu().detach().numpy()[0]  # shape (num_joints, 3)
         # print(centroid_3d)
-        return SceneInterface(mesh_scene=body_mesh, smpl_joints=smpl_joints, probe_centroid=centroid_3d) 
+        return SceneInterface(mesh_scene=body_mesh, smpl_joints=smpl_joints, probe_centroid=centroid_3d, pelvis_coords=pelvis_translation) 
     
 
     def map_kinect_to_smpl(self, kinect_keypoints):
