@@ -247,12 +247,10 @@ class CliffPose(BaseFeature[SceneInterface]):
         if not color.is_new() or not depth.is_new() or not bt.is_new() or not calibration.is_new():
             return None
 
-        
-        
-
         # get body tracking info (azure_keypoints)
         practitioner = []
         patient = []
+        patientConfidence = []
         bt = fix_body_id(bt)
         for bodyIndex, body in enumerate(bt.bodies):  
             bodyId = int(body["wtd_body_id"])
@@ -266,6 +264,7 @@ class CliffPose(BaseFeature[SceneInterface]):
                 point = (int(points2D[0][0][0]),int(points2D[0][0][1]))  
                 if(bodyId == 1):
                     patient.append(point)
+                    patientConfidence.append(joint[3] / 2.0) #convert to 0, 0.5 ot 1.0
                 if(bodyId == 2):
                     practitioner.append(point)
 
@@ -273,6 +272,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         if len(patient) == 0:
             return None
         patient_azure_keypoints = np.array(patient).reshape(32,2)
+        patient_azure_confidence = np.array(patientConfidence).reshape(32,1)
         
         # getting RGB image and depth images
         frame = color.frame
@@ -290,7 +290,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         camera_center = np.array([960, 540])
 
         # MAP from Kinect to openpose sequence of joints
-        keypoints = process_keypoints(patient_azure_keypoints)
+        keypoints = process_keypoints(patient_azure_keypoints, patient_azure_confidence)
 
         # Get translation for SMPL
         # try:

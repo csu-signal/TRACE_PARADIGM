@@ -191,10 +191,10 @@ def map_kinect_to_smpl(kinect_keypoints):
     return np.array(smpl_keypoints)
 
 
-def process_keypoints(azure_keypoints_sample, device="cuda"):
+def process_keypoints(azure_keypoints_sample, azure_conf, device="cuda"):
     azure_keypoints_sample = azure_keypoints_sample.reshape(32,2)
     xy = map_kinect_to_smpl(azure_keypoints_sample)
-    conf        = (xy != 0).any(axis=1, keepdims=True).astype(np.float32)
+    conf        = azure_conf.astype(np.float32)
     smpl_kpts   = np.hstack([xy, conf])    # shape (49, 3)
     kpts        = smpl_kpts[None].astype(np.float32)    # (1, 49, 3)
     keypoints   = torch.from_numpy(kpts).to(device)

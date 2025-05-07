@@ -114,7 +114,7 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                             calibration.camera_matrix,
                             calibration.distortion) 
                         point = (int(points2D[0][0][0]),int(points2D[0][0][1])) 
-                        # print("Point Confidence: " + str(int(joint[3]))) 
+                        #print("Point Confidence: " + str(joint[3] / 2.0)) 
                         if(bodyId == 1):
                             patient.append(point)
                         if(bodyId == 2):
