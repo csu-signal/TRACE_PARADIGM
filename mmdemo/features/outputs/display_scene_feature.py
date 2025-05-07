@@ -240,12 +240,12 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             "4": lambda _ : _state_change(self, "4")
         }
 
-        # axis_trimesh = trimesh.creation.axis(
-        #     origin_size = 0.03,     # little cube at the origin
-        #     axis_length = 0.3)      # length of each arrow (metres)
+        axis_trimesh = trimesh.creation.axis(
+            origin_size = 0.03,     # little cube at the origin
+            axis_length = 0.3)      # length of each arrow (metres)
 
-        # axis_mesh = pyrender.Mesh.from_trimesh(axis_trimesh, smooth=False)
-        # axis_node = pyrender.Node(mesh=axis_mesh)
+        axis_mesh = pyrender.Mesh.from_trimesh(axis_trimesh, smooth=False)
+        axis_node = pyrender.Node(mesh=axis_mesh)
 
         self.scene = pyrender.Scene()
         self.caption = caption = [dict(
@@ -255,8 +255,8 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             font_pt   = 30,
             color    = (0.,1.,0.,1.),
             scale    = 1.0)]
-        # self.scene.add_node(axis_node)
-        # self.scene.set_pose(axis_node, np.eye(4))
+        self.scene.add_node(axis_node)
+        self.scene.set_pose(axis_node, np.eye(4))
         self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption }, registered_keys=_registered_keys)
 
 
@@ -318,7 +318,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                     arrow_mesh.apply_transform(R_flip)
                     arrow_pyrender = pyrender.Mesh.from_trimesh(arrow_mesh, material=arrow_material, smooth=False)
 
-        mesh.mesh_scene.apply_transform(R_flip)
+        # mesh.mesh_scene.apply_transform(R_flip)
         mesh_pyrender = pyrender.Mesh.from_trimesh(mesh.mesh_scene)
         camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
         light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
@@ -344,16 +344,21 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         if mesh.probe_centroid is not None:
             print("probe is detected", mesh.probe_centroid)
-            sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=0.05)
-            sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
-            sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=False)
+            offset = np.array([0.0, -0.02, -0.4])
+            head_offset = np.array([0.0, 0.0, -0.1])
+            target = mesh.probe_centroid +head_offset
+            tail = mesh.probe_centroid + offset
+
+            sphere_trimesh = arrow_mesh = create_arrow(tail, target,  shaft_radius=0.01,head_radius=0.03, head_length=0.08)
+            # sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
+            sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=True)
             self.pn = pyrender.Node(sphere)
             self.scene.add_node(self.pn)
-            self.scene.set_pose(self.pn, np.eye(4))
-            self.scene.set_pose(self.pn, np.block([
-                [np.eye(3), mesh.probe_centroid.reshape(3,1)],
-                [np.zeros((1,3)), 1]
-            ]))
+            # self.scene.set_pose(self.pn, np.eye(4))
+            # self.scene.set_pose(self.pn, np.block([
+            #     [np.eye(3), mesh.probe_centroid.reshape(3,1)],
+            #     [np.zeros((1,3)), 1]
+            # ]))
 
         # update the tracker
 

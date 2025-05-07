@@ -73,9 +73,9 @@ if __name__ == "__main__":
         gestureLandmarks=gesture,
         bodyTracking = body_tracking,
         calibration=calibration,
-        landmarks = False
+        landmarks = True
     )
-    depth_output_frame = depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=False)
+    depth_output_frame = depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=True)
     
     # run demo and show output
     demo = Demo(

@@ -345,8 +345,12 @@ class CliffPose(BaseFeature[SceneInterface]):
             num_iters=5,
             device=self.device)
 
-        new_opt_vertices, new_joints = smpl_fix_coordinates(new_opt_vertices,new_opt_joints, pelvis_translation)
-
+        try:
+            new_opt_vertices, new_joints = smpl_fix_coordinates(new_opt_vertices,new_opt_joints, pelvis_translation)
+        except:
+            new_opt_vertices = new_opt_vertices
+            new_joints = new_opt_joints
+            
         vertices = new_opt_vertices.cpu().detach().numpy()
         if vertices.ndim == 3:
             vertices = vertices[0]
