@@ -22,9 +22,9 @@ def rgb_hsv_mask(bgr):
     s = hsv[..., 1] / 255.0
     v = hsv[..., 2] / 255.0
 
-    mask = ((h >= 0.000) & (h <= 0.989) &
-            (s >= 0.857) & (s <= 1.000) &
-            (v >= 0.334) & (v <= 0.863)).astype(np.uint8) * 255
+    mask = ((h >= 0.044) & (h <= 0.170) &
+            (s >= 0.437) & (s <= 0.893) &
+            (v >= 0.820) & (v <= 1.000)).astype(np.uint8) * 255
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)

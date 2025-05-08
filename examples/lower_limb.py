@@ -82,10 +82,10 @@ if __name__ == "__main__":
         targets=[
             DisplayFrame(color_output_frame),
             DisplayFrame(depth_output_frame),
-            DisplayScene(displayScene, record=True, save_dir_prefix=save_dir_prefix),
-            SaveVideo(depth_output_frame, frame_rate=10, video_type="depth", delete_output=False, save_dir_prefix=save_dir_prefix),
-            SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False, save_dir_prefix=save_dir_prefix),
-            ParadigmLog(gesture, body_tracking, depth, calibration, displayScene, csv=True, fileName="paradigm", output_dir=save_dir_prefix),
+            DisplayScene(displayScene, record=False, save_dir_prefix=save_dir_prefix),
+            # SaveVideo(depth_output_frame, frame_rate=10, video_type="depth", delete_output=False, save_dir_prefix=save_dir_prefix),
+            # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False, save_dir_prefix=save_dir_prefix),
+            # ParadigmLog(gesture, body_tracking, depth, calibration, displayScene, csv=True, fileName="paradigm", output_dir=save_dir_prefix),
             #Log(transcriptions, stdout=True),
         ]
     )

@@ -264,7 +264,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self,
         mesh: SceneInterface,
     ):
-        if not mesh.is_new():
+        if not mesh.is_new() or mesh.mesh_scene is None:
             self.window_should_be_up = False
             return None
        
@@ -281,14 +281,14 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         R_x = np.array([
             [1, 0, 0, 0],
-            [0, np.cos(self.angle_x), -np.sin(self.angle_x), 0],
+            [0, np.cos(self.angle_x), np.sin(self.angle_x), 0],
             [0, np.sin(self.angle_x), np.cos(self.angle_x), 0],
             [0, 0, 0, 1]
         ])
         R_y = np.array([
             [np.cos(self.angle_y), 0, np.sin(self.angle_y), 0],
             [0, 1, 0, 0],
-            [-np.sin(self.angle_y), 0, np.cos(self.angle_y), 0],
+            [np.sin(self.angle_y), 0, np.cos(self.angle_y), 0],
             [0, 0, 0, 1]
         ])
         T = np.array([
@@ -325,7 +325,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         if self.mn is not None:
             self.scene.remove_node(self.mn)
-            self.scene.remove_node(self.an)
+            # self.scene.remove_node(self.an)
             self.scene.remove_node(self.cn)
             self.scene.remove_node(self.ln)
         if self.scene.has_node(self.pn):
@@ -336,29 +336,18 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.ln = pyrender.Node(light=light)
         self.an = pyrender.Node(mesh=arrow_pyrender)
         self.scene.add_node(self.mn)
-        self.scene.add_node(self.an)
-        self.scene.add_node(self.cn)
-        self.scene.set_pose(self.cn, cam_pose)
-        self.scene.add_node(self.ln)
-        self.scene.set_pose(self.ln, cam_pose)
+        # self.scene.add_node(self.an)
 
         if mesh.probe_centroid is not None:
             print("probe is detected", mesh.probe_centroid)
-            offset = np.array([0.0, -0.02, -0.4])
-            head_offset = np.array([0.0, 0.0, -0.1])
-            target = mesh.probe_centroid +head_offset
-            tail = mesh.probe_centroid + offset
-
-            sphere_trimesh = arrow_mesh = create_arrow(tail, target,  shaft_radius=0.01,head_radius=0.03, head_length=0.08)
-            # sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
-            sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=True)
-            self.pn = pyrender.Node(sphere)
-            self.scene.add_node(self.pn)
-            # self.scene.set_pose(self.pn, np.eye(4))
-            # self.scene.set_pose(self.pn, np.block([
-            #     [np.eye(3), mesh.probe_centroid.reshape(3,1)],
-            #     [np.zeros((1,3)), 1]
-            # ]))
+            sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=0.04)
+            sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
+            sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=False)
+            self.pn = self.scene.add(sphere, pose=np.eye(4))          # identity pose
+            self.scene.set_pose(self.pn, np.block([
+                [np.eye(3), mesh.probe_centroid.reshape(3,1)],
+                [np.zeros((1,3)), 1]
+            ]))
 
         # update the tracker
 
@@ -366,6 +355,10 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
             self.viewer.viewer_flags['caption'][0]['text'] = f"{self.proximity_tracker.get_counts()}"
 
+        self.scene.add_node(self.cn)
+        self.scene.set_pose(self.cn, cam_pose)
+        self.scene.add_node(self.ln)
+        self.scene.set_pose(self.ln, cam_pose)
         self.viewer.render_lock.release()
 
 

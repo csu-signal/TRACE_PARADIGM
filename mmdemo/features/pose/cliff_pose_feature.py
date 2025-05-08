@@ -270,12 +270,13 @@ class CliffPose(BaseFeature[SceneInterface]):
 
 
         if len(patient) == 0:
-            return None
+            return SceneInterface(mesh_scene=None, smpl_joints=None, probe_centroid=None, pelvis_coords=None)
         patient_azure_keypoints = np.array(patient).reshape(32,2)
         patient_azure_confidence = np.array(patientConfidence).reshape(32,1)
         
         # getting RGB image and depth images
         frame = color.frame
+        frame = frame[:, :, ::-1]
         depth_frame = depth.frame
         depth_map = depth_frame/1000.0
         # depth_map = depth_scaled_metric(depth_frame, near = 0.5, far = 5.5, offset = 0.3)
@@ -328,7 +329,7 @@ class CliffPose(BaseFeature[SceneInterface]):
             pred_rotmat, betas, pred_cam_crop = self.cliff_model(norm_img, bbox_info, n_iter=5)
 
         # Use data_full_cam if using translation data from Kinect
-        data_full_cam = torch.tensor([[kinect_translation[0]/1000,  -kinect_translation[1]/1000, kinect_translation[2]]], dtype=torch.float32, device=self.device)
+        data_full_cam = torch.tensor([[kinect_translation[0]/1000,  -kinect_translation[1]/1000, kinect_translation[2]/1000]], dtype=torch.float32, device=self.device)
         
         # Process pose data
         init_pose = transforms.matrix_to_axis_angle(pred_rotmat).contiguous().view(-1, 72)    
