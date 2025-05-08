@@ -1,4 +1,5 @@
 from datetime import datetime
+import math
 from pathlib import Path
 from threading import Lock
 from queue import SimpleQueue
@@ -174,9 +175,12 @@ class ProximityTracker:
             leg_keypoints: list or np.array of shape (num_keypoints, 3)
         """
 
+        print(f"leg_keypoints: {leg_keypoints.shape}")
+        print(f"probe_position: {probe_position.shape}")
         deltas = np.array(leg_keypoints) - np.array(probe_position)
         distances_squared = np.sum(deltas ** 2, axis=1)
         close = distances_squared < self.radius_squared
+        print(f"close: {close.shape}")
 
         self.proximity_counts += close.astype(int)
 
@@ -204,7 +208,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         super().__init__(scene)
         self.record = record
         self.save_dir_prefix = save_dir_prefix
-        self.proximity_tracker = ProximityTracker(3, 0.1)
+        self.proximity_tracker = ProximityTracker(6, 0.2)
 
 
     
@@ -226,6 +230,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.angle_y = 0.0
         self.rotate_step = np.radians(15)
         self.zoom_step = 0.1
+        self.custom_markers = set()
 
         _registered_keys = {
             "w": lambda _ : _increase_x_rotation(self),
@@ -272,8 +277,8 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.scene.add_node(self.ln)
         self.scene.set_pose(self.ln, cam_pose)
 
-        self.scene.add_node(axis_node)
-        self.scene.set_pose(axis_node, np.eye(4))
+        # self.scene.add_node(axis_node)
+        # self.scene.set_pose(axis_node, np.eye(4))
         self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption,}, registered_keys=_registered_keys)
 
 
@@ -327,9 +332,9 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         if self.scene.has_node(self.pn):
             self.scene.remove_node(self.pn)
 
-        self.mn = pyrender.Node(mesh=mesh_pyrender)
-        self.an = pyrender.Node(mesh=arrow_pyrender)
-        self.scene.add_node(self.mn)
+        # self.mn = pyrender.Node(mesh=mesh_pyrender)
+        # self.an = pyrender.Node(mesh=arrow_pyrender)
+        # self.scene.add_node(self.mn)
         # self.scene.add_node(self.an)
 
         if mesh.probe_centroid is not None:
@@ -344,10 +349,16 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             ]))
 
             # update the tracker
-
-            self.proximity_tracker.update(mesh.probe_centroid, [(12, 2, 1), (2,5,1), (6,77,3)])
+            if mesh.pelvis_coords is not None:
+                self.add_custom_marker_az(mesh.mesh_scene, mesh.smpl_joints, 12, 13, 0.2, -90, mesh.probe_centroid, add_shpere=True, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255, 64, 32, 255], np.uint8), gamma=2.5)
+            
+            self.proximity_tracker.update(mesh.probe_centroid, mesh.smpl_joints[9:15, :])
 
             self.viewer.viewer_flags['caption'][0]['text'] = f"{self.proximity_tracker.get_counts()}"
+
+        self.mn = pyrender.Node(mesh=mesh_pyrender)
+        self.an = pyrender.Node(mesh=arrow_pyrender)
+        self.scene.add_node(self.mn)
 
         self.viewer.render_lock.release()
 
@@ -367,3 +378,112 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 f"output/{self.save_dir_prefix}/smpl_mesh" + ".gif"
                 )
         self.viewer.save_gif(video_name)
+
+    def add_custom_marker_az(self,
+                            mesh_trimesh,          # body mesh (trimesh.Trimesh)
+                            joints,                # (N,3) numpy
+                            joint_id_a,
+                            joint_id_b,
+                            l,               # metres from A along AB
+                            alpha_deg,       # azimuth inside X-Z plane
+                            probe_centroid,  # (1,3) x,y,z cooordinates of probe centroid
+                            add_shpere = False,
+                            sphere_radius=0.02,
+                            sphere_color=(0.2,0.8,1.0,1.0)
+                            ,add_color_gradient = True
+                            ,inner_r  = 0.01
+                            ,outer_r = 0.03
+                            ,hit_rgba = np.array([255, 64, 32, 255], np.uint8)
+                            ,gamma = 2.5):
+        """
+        l is length along the line from joint A to joint B
+        α is measured in the plane perpendicular to AB:
+            0° → local +X
+        90° → local +Z
+        180° → local −X      (-y is impossible because the whole plane is ⟂ y)
+        gamma  # >1 steeper, <1 gentler, 1 = linear gamma controls the gradient
+
+        # refer to JOINT_NAMES in the common/preprocessing_operations for joint numbers
+        
+        THis stuff controls the sphere addition, radius and color
+        add_shpere = False,
+        sphere_radius=0.02,
+        sphere_color=(0.2,0.8,1.0,1.0)
+            
+        The below stuff controls the color gradient and its color
+            add_color_gradient = True
+        ,inner_r  = 0.01
+        ,outer_r = 0.03
+        ,hit_rgba = np.array([255, 64, 32, 255], np.uint8)
+        ,gamma = 2.5)
+        Returns hit-point or None.
+        """
+        print("add_custom_marker_az")
+        print("joint_id_a", joint_id_a)
+        print("joint_id_b", joint_id_b)
+        print(joints[0])
+        print(joints[joint_id_a])
+        print(joints[joint_id_b])
+        pA, pB = joints[joint_id_a], joints[joint_id_b]
+        vAB    = pB - pA
+        normAB = np.linalg.norm(vAB)
+        if normAB < 1e-8:
+            raise ValueError("AB length ≈ 0; cannot build frame.")
+
+        # local frame ---------------------------------------------------
+        y_axis = vAB / normAB                                            # +Y
+        # choose an arbitrary world-up that is *not* colinear with y_axis
+        world_up = np.array([0, 0, 1.0])
+        if abs(np.dot(world_up, y_axis)) > 0.95:                         # almost colinear
+            world_up = np.array([0, 1.0, 0])
+        x_axis = np.cross(world_up, y_axis)
+        x_axis /= np.linalg.norm(x_axis)                                 # +X
+        z_axis = np.cross(y_axis, x_axis)                                # +Z (right-handed)
+
+        # ray origin & direction ---------------------------------------
+        origin   = pA + (l / normAB) * vAB                               # on AB
+        alpha    = math.radians(alpha_deg)
+        dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
+        dir_vec /= np.linalg.norm(dir_vec)
+
+        # ray-mesh intersection ----------------------------------------
+        loc, *_ = mesh_trimesh.ray.intersects_location(
+                    origin.reshape(1,3), dir_vec.reshape(1,3),
+                    multiple_hits=False)
+        if len(loc)==0:
+            return None
+        hit = loc[0]
+        probe_squared_distance_to_hit = np.sum((hit - probe_centroid) ** 2, axis=0)
+        print(f"probe_squared_distance_to_hit: {probe_squared_distance_to_hit}")
+        radius = 0.3
+        close = probe_squared_distance_to_hit < radius ** 2
+
+
+
+            # ───────────────── colour-gradient around the hit ─────────────────
+        if add_color_gradient:
+                    
+            dists   = np.linalg.norm(mesh_trimesh.vertices - hit, axis=1)
+            in_band = dists < outer_r
+            
+            if np.any(in_band):
+                                
+                lin   = (outer_r - dists[in_band]) / (outer_r - inner_r)
+                w     = np.clip(lin, 0.0, 1.0) ** gamma
+                w     = w[:, None]                                  # (k,1)
+            
+                base  = mesh_trimesh.visual.vertex_colors[in_band].astype(np.float32)
+                target = hit_rgba.astype(np.float32)                # make it float for math
+                blend = (w * target + (1.0 - w) * base).astype(np.uint8)
+            
+                mesh_trimesh.visual.vertex_colors[in_band] = blend
+                #self.scene.add(mesh_trimesh)
+
+        # visual sphere -------------------------------------------------
+        if add_shpere:
+            sph = trimesh.creation.uv_sphere(radius=sphere_radius)
+            sph.visual.vertex_colors = sphere_color
+            sph.apply_translation(hit)
+            cm = self.scene.add(pyrender.Mesh.from_trimesh(sph))
+            self.custom_markers.add(cm)
+        return hit

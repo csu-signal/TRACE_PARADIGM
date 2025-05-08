@@ -343,7 +343,7 @@ class CliffPose(BaseFeature[SceneInterface]):
             camera_center_tensor =camera_center_tensor,
             focal_length = focal_length,
             pose_prior=self.pose_prior,
-            num_iters=5,
+            num_iters=1,
             device=self.device)
 
         try:
