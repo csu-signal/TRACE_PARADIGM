@@ -45,11 +45,11 @@ def get_pelvis_translation(pelvis_xy, depth_m, K, device="cuda"):
 def get_probe_centroid(frame, depth_m, K):
     mask        = rgb_hsv_mask(frame)
     centroid_uv = centroid_px(mask)
-    print("centroid_uv", centroid_uv)
+    # print("centroid_uv", centroid_uv)
     centroid_3d = None
     if centroid_uv is not None:
         centroid_3d = px_to_cam(centroid_uv, depth_m, K)
-        print("centroid_3d", centroid_3d)
+        # print("centroid_3d", centroid_3d)
     return centroid_3d
 
 def depth_scaled_metric(depth_u8, near=0.5, far=5.46, offset=0.3):
@@ -70,8 +70,8 @@ def smpl_fix_coordinates(vertices, joints, pelvis_translation):
 
     jpelv = joints[0,8].unsqueeze(0)
 
-    print(f"jpelv :{jpelv}")
-    print(f"pelvis_translation: {pelvis_translation}")
+    # print(f"jpelv :{jpelv}")
+    # print(f"pelvis_translation: {pelvis_translation}")
     pelvis_zero_vertices  = vertices - jpelv[:, None, :]   # (B,6890,3)
     pelvis_zero_joints    = joints   - jpelv[:, None, :] 
 

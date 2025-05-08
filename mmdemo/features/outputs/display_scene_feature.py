@@ -248,6 +248,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         axis_node = pyrender.Node(mesh=axis_mesh)
 
         self.scene = pyrender.Scene()
+        self.scene.clear()
         self.caption = caption = [dict(
             text     = STATE_CONFIG[self.current_state]['text'],
             location = TextAlign.TOP_CENTER,
@@ -255,9 +256,25 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             font_pt   = 30,
             color    = (0.,1.,0.,1.),
             scale    = 1.0)]
+        
+        cam_pose = [
+            [ 0.94023129, -0.27320049,  0.2032895,   0.69486399],
+            [-0.17385694, -0.89841259, -0.40327233, -0.97562134],
+            [ 0.29281204,  0.34382598, -0.89221343, -2.32217645],
+            [ 0.0,         0.0,         0.0,         1.0       ]
+        ]
+        camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+        light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
+        self.cn = pyrender.Node(camera=camera_obj)
+        self.ln = pyrender.Node(light=light)
+        self.scene.add_node(self.cn)
+        self.scene.set_pose(self.cn, cam_pose)
+        self.scene.add_node(self.ln)
+        self.scene.set_pose(self.ln, cam_pose)
+
         self.scene.add_node(axis_node)
         self.scene.set_pose(axis_node, np.eye(4))
-        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption }, registered_keys=_registered_keys)
+        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption,}, registered_keys=_registered_keys)
 
 
     def get_output(
@@ -277,27 +294,8 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         mesh_extent = np.max(mesh.mesh_scene.bounding_box.extents)
         base_distance = mesh_extent * 2.5
-        camera_distance = base_distance * self.zoom_factor
+        # camera_distance = base_distance * self.zoom_factor
 
-        R_x = np.array([
-            [1, 0, 0, 0],
-            [0, np.cos(self.angle_x), np.sin(self.angle_x), 0],
-            [0, np.sin(self.angle_x), np.cos(self.angle_x), 0],
-            [0, 0, 0, 1]
-        ])
-        R_y = np.array([
-            [np.cos(self.angle_y), 0, np.sin(self.angle_y), 0],
-            [0, 1, 0, 0],
-            [np.sin(self.angle_y), 0, np.cos(self.angle_y), 0],
-            [0, 0, 0, 1]
-        ])
-        T = np.array([
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
-            [0, 0, 1, camera_distance],
-            [0, 0, 0, 1]
-        ])
-        cam_pose = R_y @ R_x @ T
         R_flip = tf.rotation_matrix(2*np.pi, [1, 1, 0])
 
         ### setting joints to be displayed
@@ -323,17 +321,13 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
         light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
 
-        if self.mn is not None:
+        if self.scene.has_node(self.mn):
             self.scene.remove_node(self.mn)
-            # self.scene.remove_node(self.an)
-            self.scene.remove_node(self.cn)
-            self.scene.remove_node(self.ln)
+
         if self.scene.has_node(self.pn):
             self.scene.remove_node(self.pn)
 
         self.mn = pyrender.Node(mesh=mesh_pyrender)
-        self.cn = pyrender.Node(camera=camera_obj)
-        self.ln = pyrender.Node(light=light)
         self.an = pyrender.Node(mesh=arrow_pyrender)
         self.scene.add_node(self.mn)
         # self.scene.add_node(self.an)
@@ -349,16 +343,12 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 [np.zeros((1,3)), 1]
             ]))
 
-        # update the tracker
+            # update the tracker
 
             self.proximity_tracker.update(mesh.probe_centroid, [(12, 2, 1), (2,5,1), (6,77,3)])
 
             self.viewer.viewer_flags['caption'][0]['text'] = f"{self.proximity_tracker.get_counts()}"
 
-        self.scene.add_node(self.cn)
-        self.scene.set_pose(self.cn, cam_pose)
-        self.scene.add_node(self.ln)
-        self.scene.set_pose(self.ln, cam_pose)
         self.viewer.render_lock.release()
 
 
