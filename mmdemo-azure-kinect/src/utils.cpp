@@ -20,7 +20,7 @@ json body_frame_info(k4abt::frame frame) {
     for (int j = 0; j < K4ABT_JOINT_COUNT; j++) {
       body_result_json["joint_positions"].push_back(
           {skeleton.joints[j].position.xyz.x, skeleton.joints[j].position.xyz.y,
-           skeleton.joints[j].position.xyz.z});
+           skeleton.joints[j].position.xyz.z, skeleton.joints[j].confidence_level});
 
       body_result_json["joint_orientations"].push_back(
           {skeleton.joints[j].orientation.wxyz.w,

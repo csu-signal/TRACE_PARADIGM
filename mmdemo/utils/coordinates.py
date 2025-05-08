@@ -66,7 +66,7 @@ def camera_3d_to_pixel(point, calibration: CameraCalibrationInterface):
     """
 
     point, _ = cv.projectPoints(
-        np.array(point),
+        np.array(point[:3]),
         np.array([0.0, 0.0, 0.0]),
         np.array([0.0, 0.0, 0.0]),
         calibration.camera_matrix,
@@ -76,8 +76,8 @@ def camera_3d_to_pixel(point, calibration: CameraCalibrationInterface):
 
 
 def world_3d_to_camera_3d(point, calibration: CameraCalibrationInterface):
-    return np.dot(calibration.rotation, point) + calibration.translation
+    return np.dot(calibration.rotation, point[:3]) + calibration.translation
 
 
 def camera_3d_to_world_3d(point, calibration: CameraCalibrationInterface):
-    return np.dot(np.linalg.inv(calibration.rotation), point - calibration.translation)
+    return np.dot(np.linalg.inv(calibration.rotation), point[:3] - calibration.translation)

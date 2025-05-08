@@ -11,7 +11,7 @@ import numpy as np
 from mmdemo.base_feature import BaseFeature
 from mmdemo.base_interface import BaseInterface
 from mmdemo.features.gesture.helpers import fix_body_id
-from mmdemo.interfaces import BodyTrackingInterface, CameraCalibrationInterface, DepthImageInterface, EmptyInterface, GazeConesInterface, GestureConesInterface, HciiGestureConesInterface, HciiSelectedObjectsInterface, LandmarkInterface
+from mmdemo.interfaces import BodyTrackingInterface, CameraCalibrationInterface, DepthImageInterface, EmptyInterface, GazeConesInterface, GestureConesInterface, HciiGestureConesInterface, HciiSelectedObjectsInterface, LandmarkInterface, SceneInterface
 from mmdemo.features.gesture.gesture_feature import Gesture
 from mmdemo.interfaces.data import HciiSelectedObjectInfo
 from mmdemo.utils.coordinates import pixel_to_camera_3d, CoordinateConversionError
@@ -38,14 +38,14 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
     """
 
     def __init__(
-        self, gesture, bodyTracking, depth, calibration, stdout=False, csv=False, fileName=None, output_dir=None
+        self, gesture, bodyTracking, depth, calibration, cliff, stdout=False, csv=False, fileName=None, output_dir=None
     ) -> None:
         self.stdout = stdout
         self.csv = csv
         self.fileName = f"{fileName}.csv"
         self._out_dir = output_dir
 
-        super().__init__(gesture, bodyTracking, depth, calibration)
+        super().__init__(gesture, bodyTracking, depth, calibration, cliff)
 
     def initialize(self):
         if self.csv:
@@ -58,6 +58,7 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                     + datetime.strftime(datetime.now(), "%Y-%m-%d-%H-%M-%S")
                 )
             os.makedirs(self.output_dir, exist_ok=True)
+            os.makedirs(f'{self.output_dir}/depthMaps', exist_ok=True)
 
             # create output files
             file = self.output_dir / self.fileName
@@ -71,24 +72,27 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
 
     def get_output(self, *args):
         logged_something = False
-        if(len(args) == 4):
+        if(len(args) == 5):
             gestureLandmarks = args[0]
             bt = args[1]
             depth = args[2]
             calibration = args[3]
-            if gestureLandmarks.is_new() or bt.is_new() or depth.is_new() or calibration.is_new():
-                self.log(gestureLandmarks, bt, depth, calibration)
+            cliff = args[4]
+            if gestureLandmarks.is_new() or bt.is_new() or depth.is_new() or calibration.is_new() or cliff.is_new():
+                self.log(gestureLandmarks, bt, depth, calibration, cliff)
                 logged_something = True
 
         self.frame += 1
         return EmptyInterface() if logged_something else None
 
-    def log(self, gestureLandmarks: LandmarkInterface, bt: BodyTrackingInterface, depth: DepthImageInterface, calibration: CameraCalibrationInterface):
+    def log(self, gestureLandmarks: LandmarkInterface, bt: BodyTrackingInterface, depth: DepthImageInterface, calibration: CameraCalibrationInterface,
+    cliff: SceneInterface):
         if self.stdout:
             print(f"(frame {self.frame:05})", gestureLandmarks, bt)
 
         if self.csv:
             file: Path = self.output_dir / self.fileName
+            depthFrame: Path = self.output_dir / "depthMaps" / f"frame-{self.frame}-depth-map.npy"
             with open(file, "a", newline="") as f:
                 writer = csv.writer(f)
                 header_row = ["frame_index"]
@@ -97,7 +101,8 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                 header_row.append('aspect_ratio')
                 h, w = depth.frame.shape
                 output_row.append(f"{w}x{h}")
-
+                np.save(depthFrame, depth.frame)
+                
                 header_row.append("patient_body_joints")
                 header_row.append("practitioner_body_joints")
 
@@ -108,12 +113,13 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                     bodyId = int(body["wtd_body_id"])
                     for jointIndex, joint in enumerate(body["joint_positions"]):
                         points2D, _ = cv.projectPoints(
-                            np.array(joint), 
+                            np.array(joint[:3]), 
                             calibration.rotation,
                             calibration.translation,
                             calibration.camera_matrix,
                             calibration.distortion) 
-                        point = (int(points2D[0][0][0]),int(points2D[0][0][1]))  
+                        point = (int(points2D[0][0][0]),int(points2D[0][0][1])) 
+                        #print("Point Confidence: " + str(joint[3] / 2.0)) 
                         if(bodyId == 1):
                             patient.append(point)
                         if(bodyId == 2):
@@ -156,6 +162,12 @@ class ParadigmLog(BaseFeature[EmptyInterface]):
                 output_row.append(patient_l)
                 output_row.append(practitioner_r)
                 output_row.append(practitioner_l)
+
+                header_row.append('probe_centroid')
+                output_row.append(cliff.probe_centroid)
+
+                header_row.append('pelvis_coordinates')
+                output_row.append(cliff.pelvis_coords)
 
                 header_row.append('rotation')
                 header_row.append('translation')

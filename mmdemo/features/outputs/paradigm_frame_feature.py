@@ -298,7 +298,7 @@ class ParadigmFrame(BaseFeature[ColorImageInterface]):
                     bodyLocation = getPointSubcategory(Joint(jointIndex))
                     if(bodyLocation != BodyCategory.RIGHT_HAND and bodyLocation != BodyCategory.LEFT_HAND):
                         points2D, _ = cv.projectPoints(
-                            np.array(joint), 
+                            np.array(joint[:3]), 
                             calibration.rotation,
                             calibration.translation,
                             calibration.camera_matrix,
