@@ -112,6 +112,15 @@ If you are experiencing errors related to .dll files (specially CUDA dlls i.e cu
 5. If updating/reinstalling CUDA doesn't work, try to reinstall Miniconda/Anaconda:
     - Finally, reinstall Miniconda or Anaconda. A fresh installation can resolve conflicts that might arise from previous installations, especially those that affect .dll files.
 
+
+### chumpy package issue
+
+run `pip install chumpy==0.7.2`
+`    from numpy import bool, int, float, complex, object, unicode, str, nan, inf
+ImportError: cannot import name 'bool' from 'numpy' (C:\ProgramData\anaconda3\envs\multimodalDemo\lib\site-packages\numpy\__init__.py)`
+
+open the file and comment out the line
+
 ### Solution for NotImplementedError concerning torchvision
 
 Uninstall Torch and Torchvision: `pip uninstall torch torchvision`
