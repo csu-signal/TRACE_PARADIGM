@@ -231,6 +231,9 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.rotate_step = np.radians(15)
         self.zoom_step = 0.1
         self.custom_markers = set()
+        self.frame_count = 0
+
+        self.scanning_progress = {"thigh": 0, "shin": 0} #JACK123
 
         _registered_keys = {
             "w": lambda _ : _increase_x_rotation(self),
@@ -296,15 +299,15 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         self.viewer.render_lock.acquire()
 
-
-        mesh_extent = np.max(mesh.mesh_scene.bounding_box.extents)
+        self.mesh = mesh
+        mesh_extent = np.max(self.mesh.mesh_scene.bounding_box.extents)
         base_distance = mesh_extent * 2.5
         # camera_distance = base_distance * self.zoom_factor
 
         R_flip = tf.rotation_matrix(2*np.pi, [1, 1, 0])
 
         ### setting joints to be displayed
-        mesh_centroid = mesh.mesh_scene.bounding_box.centroid.copy()
+        mesh_centroid = self.mesh.mesh_scene.bounding_box.centroid.copy()
         joints_centered = mesh.smpl_joints - mesh_centroid
         if self.current_state in STATE_CONFIG:
             targets = STATE_CONFIG[self.current_state]['targets'](joints_centered)
@@ -322,7 +325,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                     arrow_pyrender = pyrender.Mesh.from_trimesh(arrow_mesh, material=arrow_material, smooth=False)
 
         # mesh.mesh_scene.apply_transform(R_flip)
-        mesh_pyrender = pyrender.Mesh.from_trimesh(mesh.mesh_scene)
+        # mesh_pyrender = pyrender.Mesh.from_trimesh(mesh.mesh_scene)
         camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
         light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
 
@@ -348,19 +351,24 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 [np.zeros((1,3)), 1]
             ]))
 
+            # point_to_line_distance_3d = self.point_to_line_distance_3d(mesh.probe_centroid, mesh.smpl_joints[12], mesh.smpl_joints[13])
+
             # update the tracker
             if mesh.pelvis_coords is not None:
-                self.add_custom_marker_az(mesh.mesh_scene, mesh.smpl_joints, 12, 13, 0.2, -90, mesh.probe_centroid, add_shpere=True, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255, 64, 32, 255], np.uint8), gamma=2.5)
+                self.add_custom_marker_az(mesh.smpl_joints, 12, 13, 0.2, -90, mesh.probe_centroid, add_shpere=False, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255, 64, 32, 255], np.uint8), gamma=2.5)
             
             self.proximity_tracker.update(mesh.probe_centroid, mesh.smpl_joints[9:15, :])
 
-            self.viewer.viewer_flags['caption'][0]['text'] = f"{self.proximity_tracker.get_counts()}"
+            self.viewer.viewer_flags['caption'][0]['text'] = f"{self.scanning_progress}"
 
+        mesh_pyrender = pyrender.Mesh.from_trimesh(self.mesh.mesh_scene)
         self.mn = pyrender.Node(mesh=mesh_pyrender)
         self.an = pyrender.Node(mesh=arrow_pyrender)
         self.scene.add_node(self.mn)
 
         self.viewer.render_lock.release()
+
+        self.frame_count += 1
 
 
         return EmptyInterface()
@@ -380,7 +388,6 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.viewer.save_gif(video_name)
 
     def add_custom_marker_az(self,
-                            mesh_trimesh,          # body mesh (trimesh.Trimesh)
                             joints,                # (N,3) numpy
                             joint_id_a,
                             joint_id_b,
@@ -394,7 +401,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                             ,inner_r  = 0.01
                             ,outer_r = 0.03
                             ,hit_rgba = np.array([255, 64, 32, 255], np.uint8)
-                            ,gamma = 2.5):
+                            ,gamma = 5):
         """
         l is length along the line from joint A to joint B
         α is measured in the plane perpendicular to AB:
@@ -440,14 +447,24 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         x_axis /= np.linalg.norm(x_axis)                                 # +X
         z_axis = np.cross(y_axis, x_axis)                                # +Z (right-handed)
 
+        # let's do it based on probe centroid - Jack123
+        probe_distance, AB_intersection_point = self.point_to_line_distance_and_intersection_3d(probe_centroid, pA, pB)
+        print(f"probe_distance: {probe_distance}")
+        distance_threshold = 0.2
+        if self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
+            self.custom_markers.add(tuple(probe_centroid))
+            self.scanning_progress["thigh"] += 1
+
+
+        origin = AB_intersection_point
         # ray origin & direction ---------------------------------------
-        origin   = pA + (l / normAB) * vAB                               # on AB
+        #origin   = pA + (l / normAB) * vAB                               # on AB
         alpha    = math.radians(alpha_deg)
         dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
         dir_vec /= np.linalg.norm(dir_vec)
 
         # ray-mesh intersection ----------------------------------------
-        loc, *_ = mesh_trimesh.ray.intersects_location(
+        loc, *_ = self.mesh.mesh_scene.ray.intersects_location(
                     origin.reshape(1,3), dir_vec.reshape(1,3),
                     multiple_hits=False)
         if len(loc)==0:
@@ -463,7 +480,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             # ───────────────── colour-gradient around the hit ─────────────────
         if add_color_gradient:
                     
-            dists   = np.linalg.norm(mesh_trimesh.vertices - hit, axis=1)
+            dists   = np.linalg.norm(self.mesh.mesh_scene.vertices - hit, axis=1)
             in_band = dists < outer_r
             
             if np.any(in_band):
@@ -472,18 +489,160 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 w     = np.clip(lin, 0.0, 1.0) ** gamma
                 w     = w[:, None]                                  # (k,1)
             
-                base  = mesh_trimesh.visual.vertex_colors[in_band].astype(np.float32)
+                base  = self.mesh.mesh_scene.visual.vertex_colors[in_band].astype(np.float32)
                 target = hit_rgba.astype(np.float32)                # make it float for math
                 blend = (w * target + (1.0 - w) * base).astype(np.uint8)
             
-                mesh_trimesh.visual.vertex_colors[in_band] = blend
+                self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
+                #self.scene.add(mesh_trimesh)
+        
+        for pc in self.custom_markers:
+            pc = np.array(pc)
+            _, ABip = self.point_to_line_distance_and_intersection_3d(pc, pA, pB)
+            origin = ABip
+            # ray origin & direction ---------------------------------------
+            #origin   = pA + (l / normAB) * vAB                               # on AB
+            alpha    = math.radians(alpha_deg)
+            dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
+            dir_vec /= np.linalg.norm(dir_vec)
+
+            # ray-mesh intersection ----------------------------------------
+            loc, *_ = self.mesh.mesh_scene.ray.intersects_location(
+                        origin.reshape(1,3), dir_vec.reshape(1,3),
+                        multiple_hits=False)
+            if len(loc)==0:
+                return None
+            hit = loc[0]
+
+            dists   = np.linalg.norm(self.mesh.mesh_scene.vertices - hit, axis=1)
+            in_band = dists < outer_r
+            
+            if np.any(in_band):
+                                
+                lin   = (outer_r - dists[in_band]) / (outer_r - inner_r)
+                w     = np.clip(lin, 0.0, 1.0) ** gamma
+                w     = w[:, None]                                  # (k,1)
+            
+                base  = self.mesh.mesh_scene.visual.vertex_colors[in_band].astype(np.float32)
+                target = hit_rgba.astype(np.float32)                # make it float for math
+                blend = (w * target + (1.0 - w) * base).astype(np.uint8)
+            
+                self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
                 #self.scene.add(mesh_trimesh)
 
         # visual sphere -------------------------------------------------
-        if add_shpere:
+        if add_shpere and self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
             sph = trimesh.creation.uv_sphere(radius=sphere_radius)
             sph.visual.vertex_colors = sphere_color
             sph.apply_translation(hit)
             cm = self.scene.add(pyrender.Mesh.from_trimesh(sph))
             self.custom_markers.add(cm)
         return hit
+    
+
+    def point_to_line_distance_and_intersection_3d(self, point, line_point1, line_point2):
+        """
+        Calculate the perpendicular distance of a point from a line in 3D space
+        and return the point of intersection on the line.
+
+        Parameters:
+            point (np.array): The point in 3D space (3D coordinates).
+            line_point1 (np.array): A point on the line (3D coordinates).
+            line_point2 (np.array): Another point on the line (3D coordinates).
+
+        Returns:
+            tuple: A tuple containing:
+                - float: The perpendicular distance from the point to the line.
+                - np.array: The point of intersection on the line (3D coordinates).
+        """
+        point = np.array(point)
+        line_point1 = np.array(line_point1)
+        line_point2 = np.array(line_point2)
+
+        # Direction vector of the line
+        line_direction = line_point2 - line_point1
+        line_direction_normalized = line_direction / np.linalg.norm(line_direction)
+
+        # Vector from line_point1 to the given point
+        point_vector = point - line_point1
+
+        # Projection of the point vector onto the line direction
+        projection_length = np.dot(point_vector, line_direction_normalized)
+        intersection_point = line_point1 + projection_length * line_direction_normalized
+
+        # Distance is the norm of the vector from the point to the intersection point
+        distance = np.linalg.norm(point - intersection_point)
+
+        return distance, intersection_point
+    
+    def is_point_on_line_segment(self, point, line_start, line_end, tolerance=1e-6):
+        """
+        Check if a point lies on a line segment in 3D space.
+
+        Parameters:
+            point (numpy.ndarray): The point to check (3D coordinates).
+            line_start (numpy.ndarray): The start point of the line segment (3D coordinates).
+            line_end (numpy.ndarray): The end point of the line segment (3D coordinates).
+            tolerance (float): A small tolerance value to account for floating-point errors.
+
+        Returns:
+            bool: True if the point lies on the line segment, False otherwise.
+        """
+        # Convert inputs to numpy arrays
+        point = np.array(point)
+        line_start = np.array(line_start)
+        line_end = np.array(line_end)
+
+        # Check if the point is collinear with the line segment
+        line_vector = line_end - line_start
+        point_vector = point - line_start
+
+        # Compute the cross product to check collinearity
+        cross_product = np.cross(line_vector, point_vector)
+        if not np.allclose(cross_product, 0, atol=tolerance):
+            return False
+
+        # Check if the point lies within the bounds of the line segment
+        dot_product = np.dot(point_vector, line_vector)
+        if dot_product < 0 or dot_product > np.dot(line_vector, line_vector):
+            return False
+
+        return True
+
+
+
+    # def point_to_line_distance_3d(self, point, line_point1, line_point2):
+    #     """
+    #     Calculate the perpendicular distance of a point from a line in 3D space.
+
+    #     Parameters:
+    #         point (np.array): The point in 3D space (3D coordinates).
+    #         line_point1 (np.array): A point on the line (3D coordinates).
+    #         line_point2 (np.array): Another point on the line (3D coordinates).
+
+    #     Returns:
+    #         float: The perpendicular distance from the point to the line.
+    #     """
+    #     point = np.array(point)
+    #     line_point1 = np.array(line_point1)
+    #     line_point2 = np.array(line_point2)
+
+    #     # Direction vector of the line
+    #     line_direction = line_point2 - line_point1
+
+    #     # Vector from line_point1 to the given point
+    #     point_vector = point - line_point1
+
+    #     # Cross product of the direction vector and the point vector
+    #     cross_product = np.cross(line_direction, point_vector)
+
+    #     # Magnitude of the cross product
+    #     cross_magnitude = np.linalg.norm(cross_product)
+
+    #     # Magnitude of the direction vector
+    #     line_magnitude = np.linalg.norm(line_direction)
+
+    #     # Distance is the ratio of the magnitudes
+    #     distance = cross_magnitude / line_magnitude
+
+    #     return distance
