@@ -1,5 +1,6 @@
 from datetime import datetime
 import math
+import os
 from pathlib import Path
 from threading import Lock
 from queue import SimpleQueue
@@ -72,94 +73,6 @@ JOINT_NAMES = [
     'Right Ear'
 ]
 
-
-STATE_CONFIG = {
-    1: {
-        'text': "Check knees visually for redness",
-        'targets': lambda joints: [joints[JOINT_NAMES.index("OP LKnee")], joints[JOINT_NAMES.index("OP RKnee")]]  # Left and Right knees
-    },
-    2: {
-        'text': "Check for redness and swelling",
-        'targets': lambda joints: [
-            (joints[JOINT_NAMES.index("OP LKnee")] + joints[JOINT_NAMES.index("OP LAnkle")]) / 2.0,  # Left calf (midpoint between knee and ankle)
-            (joints[JOINT_NAMES.index("OP RKnee")] + joints[JOINT_NAMES.index("OP RAnkle")]) / 2.0   # Right calf (midpoint between knee and ankle)
-        ]
-    },
-    3: {
-        'text': "Check between toes",
-        'targets': lambda joints: [
-            (joints[JOINT_NAMES.index("OP LSmallToe")] + joints[JOINT_NAMES.index("OP LBigToe")]) / 2.0,  # Left toe (midpoint between big and small toe)
-            (joints[JOINT_NAMES.index("OP RSmallToe")] + joints[JOINT_NAMES.index("OP RBigToe")]) / 2.0   # Right toe (midpoint between big and small toe)
-        ]
-    },
-    4: {
-        'text': "Check for swelling",
-        'targets': lambda joints: [joints[JOINT_NAMES.index("OP RHeel")], joints[JOINT_NAMES.index("OP LHeel")]]  # Left and Right heels
-    }
-}
-
-def create_arrow(start, end, shaft_radius=0.005, head_radius=0.01, head_length=0.02, sections=20):
-    """
-    Create an arrow mesh from a start point (tail) to an end point (head) using trimesh.
-    The arrow is built from a cylinder (shaft) and a cone (head).
-    """
-    vec = end - start
-    total_length = np.linalg.norm(vec)
-    if total_length < 1e-6:
-        return None
-    direction = vec / total_length
-
-    # Reserve space for the arrow head.
-    shaft_length = max(total_length - head_length, total_length * 0.8)
-    head_length = total_length - shaft_length
-
-    # Create the shaft as a cylinder along the Z-axis.
-    shaft = trimesh.creation.cylinder(radius=shaft_radius, height=shaft_length, sections=sections)
-    shaft.apply_translation([0, 0, shaft_length / 2.0])
-
-    # Create the head as a cone along the Z-axis.
-    head = trimesh.creation.cone(radius=head_radius, height=head_length, sections=sections)
-    head.apply_translation([0, 0, shaft_length + head_length / 2.0])
-
-    # Combine shaft and head.
-    arrow = trimesh.util.concatenate([shaft, head])
-
-    # Align the arrow (default along Z) with the desired direction.
-    z_axis = np.array([0, 0, 1])
-    rot_matrix = trimesh.geometry.align_vectors(z_axis, direction)
-    if rot_matrix is None:
-        rot_matrix = np.eye(3)
-    elif rot_matrix.shape == (4, 4):
-        rot_matrix = rot_matrix[:3, :3]
-    
-    T_rot = np.eye(4)
-    T_rot[:3, :3] = rot_matrix
-    arrow.apply_transform(T_rot)
-
-    # Translate so that its base (tail) is at the start position.
-    arrow.apply_translation(start)
-    return arrow
-
-
-def _increase_x_rotation(ds):
-    ds.angle_x += ds.rotate_step
-def _decrease_x_rotation(ds):
-    ds.angle_x -= ds.rotate_step
-def _increase_y_rotation(ds):
-    ds.angle_y += ds.rotate_step
-def _decrease_y_rotation(ds):
-    ds.angle_y -= ds.rotate_step
-
-def _increase_zoom(ds):
-    ds.zoom_factor *= (1 - ds.zoom_step)
-def _decrease_zoom(ds):
-    ds.zoom_factor *= (1 + ds.zoom_step)
-
-def _state_change(ds, key):
-    ds.current_state = int(chr(key))
-
-
-
 class ProximityTracker:
     def __init__(self, num_leg_keypoints, radius):
         self.radius_squared = radius ** 2
@@ -175,12 +88,12 @@ class ProximityTracker:
             leg_keypoints: list or np.array of shape (num_keypoints, 3)
         """
 
-        print(f"leg_keypoints: {leg_keypoints.shape}")
-        print(f"probe_position: {probe_position.shape}")
+        # print(f"leg_keypoints: {leg_keypoints.shape}")
+        # print(f"probe_position: {probe_position.shape}")
         deltas = np.array(leg_keypoints) - np.array(probe_position)
         distances_squared = np.sum(deltas ** 2, axis=1)
         close = distances_squared < self.radius_squared
-        print(f"close: {close.shape}")
+        # print(f"close: {close.shape}")
 
         self.proximity_counts += close.astype(int)
 
@@ -231,19 +144,32 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.rotate_step = np.radians(15)
         self.zoom_step = 0.1
         self.custom_markers = set()
+        self.frame_count = 0
 
-        _registered_keys = {
-            "w": lambda _ : _increase_x_rotation(self),
-            "s": lambda _ : _decrease_x_rotation(self),
-            "a": lambda _ : _decrease_y_rotation(self),
-            "d": lambda _ : _increase_y_rotation(self),
-            "=": lambda _ : _increase_zoom(self),
-            "-": lambda _ : _decrease_zoom(self),
-            "1": lambda _ : _state_change(self, "1"),
-            "2": lambda _ : _state_change(self, "2"),
-            "3": lambda _ : _state_change(self, "3"),
-            "4": lambda _ : _state_change(self, "4")
+        # self.scanning_progress = {"thigh": 0, "shin": 0} #JACK123
+        self.scanning_state = {
+            "right_thigh": {
+                "start_index": 9,
+                "end_index": 10,
+                "saved_marker_coords": set()
+            },
+            "right_shin": {
+                "start_index": 10,
+                "end_index": 11,
+                "saved_marker_coords": set()
+            },
+            "left_thigh": {
+                "start_index": 12,
+                "end_index": 13,
+                "saved_marker_coords": set()
+            },
+            "left_shin": {
+                "start_index": 13,
+                "end_index": 14,
+                "saved_marker_coords": set()
+            }
         }
+
 
         axis_trimesh = trimesh.creation.axis(
             origin_size = 0.03,     # little cube at the origin
@@ -255,19 +181,22 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.scene = pyrender.Scene()
         self.scene.clear()
         self.caption = caption = [dict(
-            text     = STATE_CONFIG[self.current_state]['text'],
+            text     = "Start scanning",
             location = TextAlign.TOP_CENTER,
             font_name = r"C:\Windows\Fonts\arial.ttf",
             font_pt   = 30,
             color    = (0.,1.,0.,1.),
             scale    = 1.0)]
         
+        # default camera pose is harded code after determining camera position by manually rotating and translating the pyrender scene
+        # a new pose can be determined by using the pyrender viewer and then printing self.viewer.main_camera_node
         cam_pose = [
             [ 0.94023129, -0.27320049,  0.2032895,   0.69486399],
             [-0.17385694, -0.89841259, -0.40327233, -0.97562134],
             [ 0.29281204,  0.34382598, -0.89221343, -2.32217645],
             [ 0.0,         0.0,         0.0,         1.0       ]
         ]
+
         camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
         light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
         self.cn = pyrender.Node(camera=camera_obj)
@@ -277,9 +206,12 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.scene.add_node(self.ln)
         self.scene.set_pose(self.ln, cam_pose)
 
+        # below 2 lines are adding the camera's point of view to the scene, helpful in getting a new camera pose
         # self.scene.add_node(axis_node)
         # self.scene.set_pose(axis_node, np.eye(4))
-        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption,}, registered_keys=_registered_keys)
+
+
+        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption,},)
 
 
     def get_output(
@@ -290,75 +222,58 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             self.window_should_be_up = False
             return None
        
-        # Open pyrender window
-        # self.viewer = pyrender.Viewer(scene.mesh_scene, use_raymond_lighting=True, run_in_thread=False) #TODO figure out threading, does run in thread = True cause a memory leak?
+
         self.window_should_be_up = True
-
         self.viewer.render_lock.acquire()
+        self.mesh = mesh
 
+        # check for probe centroid
+        # update the tracker
+        # add new probe marker to mesh 
+                # add previous markers to the new mesh
+        for body_part in self.scanning_state.keys():
+            # if body_part != "right_thigh": 
+            #     continue
+            if len(self.scanning_state[body_part]["saved_marker_coords"]) > 0:
+                self.add_previous_markers(body_part, 0.2, -90, add_shpere=False, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([99, 196, 79, 255], np.uint8), gamma=2.5)
 
-        mesh_extent = np.max(mesh.mesh_scene.bounding_box.extents)
-        base_distance = mesh_extent * 2.5
-        # camera_distance = base_distance * self.zoom_factor
-
-        R_flip = tf.rotation_matrix(2*np.pi, [1, 1, 0])
-
-        ### setting joints to be displayed
-        mesh_centroid = mesh.mesh_scene.bounding_box.centroid.copy()
-        joints_centered = mesh.smpl_joints - mesh_centroid
-        if self.current_state in STATE_CONFIG:
-            targets = STATE_CONFIG[self.current_state]['targets'](joints_centered)
-            for target in targets:
-                # Define a constant tail offset. Adjust this as necessary.
-                offset = np.array([0.0, -0.02, -0.4])
-                head_offset = np.array([0.0, 0.0, -0.1])
-                target = target +head_offset
-                tail = target + offset
-
-                arrow_mesh = create_arrow(tail, target,  shaft_radius=0.01,head_radius=0.03, head_length=0.08)
-                if arrow_mesh is not None:
-                    arrow_material = pyrender.MetallicRoughnessMaterial(baseColorFactor=(1.0, 0.0, 0.0, 1.0))
-                    arrow_mesh.apply_transform(R_flip)
-                    arrow_pyrender = pyrender.Mesh.from_trimesh(arrow_mesh, material=arrow_material, smooth=False)
-
-        # mesh.mesh_scene.apply_transform(R_flip)
-        mesh_pyrender = pyrender.Mesh.from_trimesh(mesh.mesh_scene)
-        camera_obj = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
-        light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
-
-        if self.scene.has_node(self.mn):
-            self.scene.remove_node(self.mn)
-
-        if self.scene.has_node(self.pn):
-            self.scene.remove_node(self.pn)
-
-        # self.mn = pyrender.Node(mesh=mesh_pyrender)
-        # self.an = pyrender.Node(mesh=arrow_pyrender)
-        # self.scene.add_node(self.mn)
-        # self.scene.add_node(self.an)
-
-        if mesh.probe_centroid is not None:
-            print("probe is detected", mesh.probe_centroid)
+        if self.mesh.probe_centroid is not None:
+            # print("probe is detected", mesh.probe_centroid)
             sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=0.04)
             sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
             sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=False)
+            
+            if self.scene.has_node(self.pn):
+                self.scene.remove_node(self.pn)
+            
             self.pn = self.scene.add(sphere, pose=np.eye(4))          # identity pose
             self.scene.set_pose(self.pn, np.block([
                 [np.eye(3), mesh.probe_centroid.reshape(3,1)],
                 [np.zeros((1,3)), 1]
             ]))
 
-            # update the tracker
-            if mesh.pelvis_coords is not None:
-                self.add_custom_marker_az(mesh.mesh_scene, mesh.smpl_joints, 12, 13, 0.2, -90, mesh.probe_centroid, add_shpere=True, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255, 64, 32, 255], np.uint8), gamma=2.5)
             
-            self.proximity_tracker.update(mesh.probe_centroid, mesh.smpl_joints[9:15, :])
 
-            self.viewer.viewer_flags['caption'][0]['text'] = f"{self.proximity_tracker.get_counts()}"
+            for body_part in self.scanning_state.keys():
+                # if body_part != "right_thigh": 
+                #     continue
+                self.add_new_probe_marker(body_part, 0.2, -90, add_shpere=False, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255, 64, 32, 255], np.uint8), gamma=2.5)
 
+
+
+            
+        # render the new mesh after removing the previous one
+        if self.scene.has_node(self.mn):
+            self.scene.remove_node(self.mn)
+
+
+        mesh_pyrender = pyrender.Mesh.from_trimesh(self.mesh.mesh_scene)
         self.mn = pyrender.Node(mesh=mesh_pyrender)
-        self.an = pyrender.Node(mesh=arrow_pyrender)
         self.scene.add_node(self.mn)
+
+        progress = self.scanning_progress()
+        print(f"scanning progress: {progress}")
+        # self.viewer.viewer_flags['caption'][0]['text'] = progress
 
         self.viewer.render_lock.release()
 
@@ -377,10 +292,22 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         video_name = Path(
                 f"output/{self.save_dir_prefix}/smpl_mesh" + ".gif"
                 )
+        os.makedirs(f"output/{self.save_dir_prefix}/", exist_ok=True)  # Creates the directory if it doesn't exist
         self.viewer.save_gif(video_name)
-
+    
+    def scanning_progress(self):
+        """
+        Returns a string indicating the progress of the scanning process.
+        """
+        progress = ""
+        for body_part, data in self.scanning_state.items():
+            if len(data["saved_marker_coords"]) > 0:
+                progress += f"{body_part}: {len(data['saved_marker_coords'])} markers\n"
+            else:
+                progress += f"{body_part}: No markers\n"
+        return progress.strip()
+    
     def add_custom_marker_az(self,
-                            mesh_trimesh,          # body mesh (trimesh.Trimesh)
                             joints,                # (N,3) numpy
                             joint_id_a,
                             joint_id_b,
@@ -394,7 +321,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                             ,inner_r  = 0.01
                             ,outer_r = 0.03
                             ,hit_rgba = np.array([255, 64, 32, 255], np.uint8)
-                            ,gamma = 2.5):
+                            ,gamma = 5):
         """
         l is length along the line from joint A to joint B
         α is measured in the plane perpendicular to AB:
@@ -440,14 +367,24 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         x_axis /= np.linalg.norm(x_axis)                                 # +X
         z_axis = np.cross(y_axis, x_axis)                                # +Z (right-handed)
 
+        # let's do it based on probe centroid - Jack123
+        probe_distance, AB_intersection_point = self.point_to_line_distance_and_intersection_3d(probe_centroid, pA, pB)
+        print(f"probe_distance: {probe_distance}")
+        distance_threshold = 0.2
+        if self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
+            self.custom_markers.add(tuple(probe_centroid))
+            # self.scanning_progress["thigh"] += 1
+
+
+        origin = AB_intersection_point
         # ray origin & direction ---------------------------------------
-        origin   = pA + (l / normAB) * vAB                               # on AB
+        #origin   = pA + (l / normAB) * vAB                               # on AB
         alpha    = math.radians(alpha_deg)
         dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
         dir_vec /= np.linalg.norm(dir_vec)
 
         # ray-mesh intersection ----------------------------------------
-        loc, *_ = mesh_trimesh.ray.intersects_location(
+        loc, *_ = self.mesh.mesh_scene.ray.intersects_location(
                     origin.reshape(1,3), dir_vec.reshape(1,3),
                     multiple_hits=False)
         if len(loc)==0:
@@ -463,7 +400,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             # ───────────────── colour-gradient around the hit ─────────────────
         if add_color_gradient:
                     
-            dists   = np.linalg.norm(mesh_trimesh.vertices - hit, axis=1)
+            dists   = np.linalg.norm(self.mesh.mesh_scene.vertices - hit, axis=1)
             in_band = dists < outer_r
             
             if np.any(in_band):
@@ -472,18 +409,286 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 w     = np.clip(lin, 0.0, 1.0) ** gamma
                 w     = w[:, None]                                  # (k,1)
             
-                base  = mesh_trimesh.visual.vertex_colors[in_band].astype(np.float32)
+                base  = self.mesh.mesh_scene.visual.vertex_colors[in_band].astype(np.float32)
                 target = hit_rgba.astype(np.float32)                # make it float for math
                 blend = (w * target + (1.0 - w) * base).astype(np.uint8)
             
-                mesh_trimesh.visual.vertex_colors[in_band] = blend
+                self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
+                #self.scene.add(mesh_trimesh)
+        
+        for pc in self.custom_markers:
+            pc = np.array(pc)
+            _, ABip = self.point_to_line_distance_and_intersection_3d(pc, pA, pB)
+            origin = ABip
+            # ray origin & direction ---------------------------------------
+            #origin   = pA + (l / normAB) * vAB                               # on AB
+            alpha    = math.radians(alpha_deg)
+            dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
+            dir_vec /= np.linalg.norm(dir_vec)
+
+            # ray-mesh intersection ----------------------------------------
+            loc, *_ = self.mesh.mesh_scene.ray.intersects_location(
+                        origin.reshape(1,3), dir_vec.reshape(1,3),
+                        multiple_hits=False)
+            if len(loc)==0:
+                return None
+            hit = loc[0]
+
+            dists   = np.linalg.norm(self.mesh.mesh_scene.vertices - hit, axis=1)
+            in_band = dists < outer_r
+            
+            if np.any(in_band):
+                                
+                lin   = (outer_r - dists[in_band]) / (outer_r - inner_r)
+                w     = np.clip(lin, 0.0, 1.0) ** gamma
+                w     = w[:, None]                                  # (k,1)
+            
+                base  = self.mesh.mesh_scene.visual.vertex_colors[in_band].astype(np.float32)
+                target = hit_rgba.astype(np.float32)                # make it float for math
+                blend = (w * target + (1.0 - w) * base).astype(np.uint8)
+            
+                self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
                 #self.scene.add(mesh_trimesh)
 
         # visual sphere -------------------------------------------------
-        if add_shpere:
+        if add_shpere and self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
             sph = trimesh.creation.uv_sphere(radius=sphere_radius)
             sph.visual.vertex_colors = sphere_color
             sph.apply_translation(hit)
             cm = self.scene.add(pyrender.Mesh.from_trimesh(sph))
             self.custom_markers.add(cm)
         return hit
+    
+
+    def point_to_line_distance_and_intersection_3d(self, point, line_point1, line_point2):
+        """
+        Calculate the perpendicular distance of a point from a line in 3D space,
+        return the point of intersection on the line, and calculate the angle
+        between the line and the vector from the intersection point to the given point.
+
+        Parameters:
+            point (np.array): The point in 3D space (3D coordinates).
+            line_point1 (np.array): A point on the line (3D coordinates).
+            line_point2 (np.array): Another point on the line (3D coordinates).
+
+        Returns:
+            tuple: A tuple containing:
+                - float: The perpendicular distance from the point to the line.
+                - np.array: The point of intersection on the line (3D coordinates).
+                - float: The angle in radians between the line and the vector from
+                         the intersection point to the given point.
+        """
+        point = np.array(point)
+        line_point1 = np.array(line_point1)
+        line_point2 = np.array(line_point2)
+
+        # Direction vector of the line
+        line_direction = line_point2 - line_point1
+        line_direction_normalized = line_direction / np.linalg.norm(line_direction)
+
+        # Vector from line_point1 to the given point
+        point_vector = point - line_point1
+
+        # Projection of the point vector onto the line direction
+        projection_length = np.dot(point_vector, line_direction_normalized)
+        intersection_point = line_point1 + projection_length * line_direction_normalized
+
+        # Distance is the norm of the vector from the point to the intersection point
+        distance = np.linalg.norm(point - intersection_point)
+
+        # Vector from the intersection point to the given point
+        intersection_to_point_vector = point - intersection_point
+
+        # Calculate the angle between the line direction and the intersection-to-point vector
+        if np.linalg.norm(intersection_to_point_vector) > 1e-8:  # Avoid division by zero
+            angle = np.arccos(
+                np.clip(
+                    np.dot(line_direction_normalized, intersection_to_point_vector / np.linalg.norm(intersection_to_point_vector)),
+                    -1.0,
+                    1.0
+                )
+            )
+        else:
+            angle = 0.0  # If the point lies exactly on the line, the angle is 0
+
+        return distance, intersection_point, angle
+    
+    def is_point_on_line_segment(self, point, line_start, line_end, tolerance=1e-6):
+        """
+        Check if a point lies on a line segment in 3D space.
+
+        Parameters:
+            point (numpy.ndarray): The point to check (3D coordinates).
+            line_start (numpy.ndarray): The start point of the line segment (3D coordinates).
+            line_end (numpy.ndarray): The end point of the line segment (3D coordinates).
+            tolerance (float): A small tolerance value to account for floating-point errors.
+
+        Returns:
+            bool: True if the point lies on the line segment, False otherwise.
+        """
+        # Convert inputs to numpy arrays
+        point = np.array(point)
+        line_start = np.array(line_start)
+        line_end = np.array(line_end)
+
+        # Check if the point is collinear with the line segment
+        line_vector = line_end - line_start
+        point_vector = point - line_start
+
+        # Compute the cross product to check collinearity
+        cross_product = np.cross(line_vector, point_vector)
+        if not np.allclose(cross_product, 0, atol=tolerance):
+            return False
+
+        # Check if the point lies within the bounds of the line segment
+        dot_product = np.dot(point_vector, line_vector)
+        if dot_product < 0 or dot_product > np.dot(line_vector, line_vector):
+            return False
+
+        return True
+
+    def add_new_probe_marker(self,
+                            body_part,
+                            l,               # metres from A along AB
+                            alpha_deg,       # azimuth inside X-Z plane
+                            add_shpere = False,
+                            sphere_radius=0.02,
+                            sphere_color=(0.2,0.8,1.0,1.0)
+                            ,add_color_gradient = True
+                            ,inner_r  = 0.01
+                            ,outer_r = 0.03
+                            ,hit_rgba = np.array([255, 64, 32, 255], np.uint8)
+                            ,gamma = 5):
+
+        joint_id_a, joint_id_b = self.scanning_state[body_part]["start_index"], self.scanning_state[body_part]["end_index"]
+        pA, pB = self.mesh.smpl_joints[joint_id_a], self.mesh.smpl_joints[joint_id_b]
+        vAB    = pB - pA
+        normAB = np.linalg.norm(vAB)
+        if normAB < 1e-8:
+            raise ValueError("AB length ≈ 0; cannot build frame.")
+
+        # local frame ---------------------------------------------------
+        y_axis = vAB / normAB                                            # +Y
+        # choose an arbitrary world-up that is *not* colinear with y_axis
+        world_up = np.array([0, 0, 1.0])
+        if abs(np.dot(world_up, y_axis)) > 0.95:                         # almost colinear
+            world_up = np.array([0, 1.0, 0])
+        x_axis = np.cross(world_up, y_axis)
+        x_axis /= np.linalg.norm(x_axis)                                 # +X
+        z_axis = np.cross(y_axis, x_axis)                                # +Z (right-handed)
+
+        # let's do it based on probe centroid - Jack123
+        probe_distance, AB_intersection_point, angle_intersection = self.point_to_line_distance_and_intersection_3d(self.mesh.probe_centroid, pA, pB)
+        print(f"probe_distance: {probe_distance}")
+        
+        distance_threshold = l
+        if self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
+            add_color_gradient = True
+            self.scanning_state[body_part]["saved_marker_coords"].add(tuple(self.mesh.probe_centroid))
+        else:
+            add_color_gradient = False
+
+        origin = AB_intersection_point
+        # alpha_deg = -90 if angle_intersection == 0 else np.degrees(angle_intersection)
+
+        # ray origin & direction ---------------------------------------
+        #origin   = pA + (l / normAB) * vAB                               # on AB
+        # alpha    = math.radians(alpha_deg)
+        alpha    = -angle_intersection
+        dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
+        dir_vec /= np.linalg.norm(dir_vec)
+
+        # ray-mesh intersection ----------------------------------------
+        loc, *_ = self.mesh.mesh_scene.ray.intersects_location(
+                    origin.reshape(1,3), dir_vec.reshape(1,3),
+                    multiple_hits=False)
+        if len(loc)==0:
+            return None
+        hit = loc[0]
+        probe_squared_distance_to_hit = np.sum((hit - self.mesh.probe_centroid) ** 2, axis=0)
+        # print(f"probe_squared_distance_to_hit: {probe_squared_distance_to_hit}")
+        radius = 0.3
+        close = probe_squared_distance_to_hit < radius ** 2
+
+        if add_color_gradient:
+                    
+            dists   = np.linalg.norm(self.mesh.mesh_scene.vertices - hit, axis=1)
+            in_band = dists < outer_r
+            
+            if np.any(in_band):
+                                
+                lin   = (outer_r - dists[in_band]) / (outer_r - inner_r)
+                w     = np.clip(lin, 0.0, 1.0) ** gamma
+                w     = w[:, None]                                  # (k,1)
+            
+                base  = self.mesh.mesh_scene.visual.vertex_colors[in_band].astype(np.float32)
+                target = hit_rgba.astype(np.float32)                # make it float for math
+                blend = (w * target + (1.0 - w) * base).astype(np.uint8)
+                self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
+    
+
+    def add_previous_markers(self, 
+                            body_part,
+                            l,               # metres from A along AB
+                            alpha_deg,       # azimuth inside X-Z plane
+                            add_shpere = False,
+                            sphere_radius=0.02,
+                            sphere_color=(0.2,0.8,1.0,1.0)
+                            ,add_color_gradient = True
+                            ,inner_r  = 0.02
+                            ,outer_r = 0.04
+                            ,hit_rgba = np.array([255, 64, 32, 255], np.uint8)
+                            ,gamma = 20):
+
+        joint_id_a, joint_id_b = self.scanning_state[body_part]["start_index"], self.scanning_state[body_part]["end_index"]
+        pA, pB = self.mesh.smpl_joints[joint_id_a], self.mesh.smpl_joints[joint_id_b]
+        vAB    = pB - pA
+        normAB = np.linalg.norm(vAB)
+        if normAB < 1e-8:
+            raise ValueError("AB length ≈ 0; cannot build frame.")
+
+        # local frame ---------------------------------------------------
+        y_axis = vAB / normAB                                            # +Y
+        # choose an arbitrary world-up that is *not* colinear with y_axis
+        world_up = np.array([0, 0, 1.0])
+        if abs(np.dot(world_up, y_axis)) > 0.95:                         # almost colinear
+            world_up = np.array([0, 1.0, 0])
+        x_axis = np.cross(world_up, y_axis)
+        x_axis /= np.linalg.norm(x_axis)                                 # +X
+        z_axis = np.cross(y_axis, x_axis)                                # +Z (right-handed)
+
+        for pc in self.scanning_state[body_part]["saved_marker_coords"]:
+            
+            _pc = np.array(pc)
+            _, ABip, alpha_deg = self.point_to_line_distance_and_intersection_3d(_pc, pA, pB)
+            # alpha_deg = -90 if alpha_deg == 0 else np.degrees(alpha_deg)
+            origin = ABip
+            # ray origin & direction ---------------------------------------
+            #origin   = pA + (l / normAB) * vAB                               # on AB
+            # alpha    = math.radians(alpha_deg)
+            alpha    = -alpha_deg
+            dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
+            dir_vec /= np.linalg.norm(dir_vec)
+
+            # ray-mesh intersection ----------------------------------------
+            loc, *_ = self.mesh.mesh_scene.ray.intersects_location(
+                        origin.reshape(1,3), dir_vec.reshape(1,3),
+                        multiple_hits=False)
+            if len(loc)==0:
+                return None
+            hit = loc[0]
+
+            dists   = np.linalg.norm(self.mesh.mesh_scene.vertices - hit, axis=1)
+            in_band = dists < outer_r
+            
+            if np.any(in_band):
+                                
+                lin   = (outer_r - dists[in_band]) / (outer_r - inner_r)
+                w     = np.clip(lin, 0.0, 1.0) ** gamma
+                w     = w[:, None]                                  # (k,1)
+            
+                base  = self.mesh.mesh_scene.visual.vertex_colors[in_band].astype(np.float32)
+                target = hit_rgba.astype(np.float32)                # make it float for math
+                blend = (w * target + (1.0 - w) * base).astype(np.uint8)
+            
+                self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
