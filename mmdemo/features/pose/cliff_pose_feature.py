@@ -217,7 +217,7 @@ class CliffPose(BaseFeature[SceneInterface]):
         # z_midpoint_1 = smpl_joints[12][2]
 
         # Set the color of vertices below the midpoint to red
-        vertex_colors[vertices[:, 1] > y_midpoint_1] = [255, 0, 0, 255]
+        vertex_colors[vertices[:, 1] > y_midpoint_1] = [255, 0, 0, 128]
         # body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
 
         body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False, vertex_colors=vertex_colors)

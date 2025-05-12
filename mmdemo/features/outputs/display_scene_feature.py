@@ -257,7 +257,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             for body_part in self.scanning_state.keys():
                 # if body_part != "right_thigh": 
                 #     continue
-                self.add_new_probe_marker(body_part, 0.2, -90, add_shpere=False, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255, 64, 32, 255], np.uint8), gamma=2.5)
+                self.add_new_probe_marker(body_part, 0.2, -90, add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255,211,67, 255], np.uint8), gamma=2.5)
 
 
 
