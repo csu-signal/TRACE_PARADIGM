@@ -75,15 +75,15 @@ if __name__ == "__main__":
         calibration=calibration,
         landmarks = False
     )
-    depth_output_frame = depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=False)
-    depth_output_frame_w_landmarks = depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=True)
+    depth_output_frame = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=False)
+    depth_output_frame_w_landmarks = DepthFrame(depth, gesture, body_tracking, calibration, landmarks=True)
     
     # run demo and show output
     demo = Demo(
         targets=[
             DisplayFrame(color_output_frame),
             DisplayFrame(depth_output_frame),
-            DisplayScene(displayScene, record=True, save_dir_prefix=save_dir_prefix),
+            DisplayScene(displayScene, record=False, save_dir_prefix=save_dir_prefix),
             # SaveVideo(depth_output_frame, frame_rate=10, video_name="depth_only", delete_output=False, save_dir_prefix=save_dir_prefix),
             # SaveVideo(depth_output_frame_w_landmarks, frame_rate=10, video_name="depth_w_landmarks", delete_output=False, save_dir_prefix=save_dir_prefix),
             # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False, save_dir_prefix=save_dir_prefix),
