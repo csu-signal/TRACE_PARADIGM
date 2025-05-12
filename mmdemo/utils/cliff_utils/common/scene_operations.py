@@ -16,9 +16,9 @@ from mmdemo.utils.cliff_utils.common.utils import strip_prefix_if_present, cam_c
 import time
 from mmdemo.utils.cliff_utils.common.imutils import process_image 
 
-def rgb_hsv_mask(bgr):
+def rgb_hsv_mask(bgr, min_area= 400):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.float32)
-    h = hsv[..., 0] / 179.0          # OpenCV hue range → 0-1
+    h = hsv[..., 0] / 179.0
     s = hsv[..., 1] / 255.0
     v = hsv[..., 2] / 255.0
 
@@ -26,13 +26,27 @@ def rgb_hsv_mask(bgr):
             (s >= 0.391) & (s <= 1.000) &
             (v >= 0.771) & (v <= 1.000)).astype(np.uint8) * 255
 
+    # clean–up
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
+    # connected components
     n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+
     if n > 1:
-        largest = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-        mask = (labels == largest).astype(np.uint8) * 255
+        # index of biggest component among stats[1:] (skip background)
+        largest_idx = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+        largest_area = stats[largest_idx, cv2.CC_STAT_AREA]
+
+        if largest_area >= min_area:
+            mask = (labels == largest_idx).astype(np.uint8) * 255
+        else:
+            # too small → return empty mask
+            mask = np.zeros_like(mask, dtype=np.uint8)
+    else:
+        # no foreground blobs detected
+        mask = np.zeros_like(mask, dtype=np.uint8)
+
     return mask
 
 def centroid_px(mask):
