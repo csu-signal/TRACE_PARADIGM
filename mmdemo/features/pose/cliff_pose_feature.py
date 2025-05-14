@@ -207,9 +207,18 @@ class CliffPose(BaseFeature[SceneInterface]):
             vertices = vertices[0]
         if not isinstance(faces, np.ndarray):
             faces = faces.cpu().numpy() if torch.is_tensor(faces) else faces
-        
-        
-        body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
-        smpl_joints = new_joints.cpu().detach().numpy()[0]  # shape (num_joints, 3)
 
+        # Initialize vertex_colors with default color (e.g., white with full opacity)
+        vertex_colors = np.ones((vertices.shape[0], 4), dtype=np.uint8) * 255
+        
+        
+        smpl_joints = new_joints.cpu().detach().numpy()[0]  # shape (num_joints, 3)
+        y_midpoint_1 = smpl_joints[12][1]
+        # z_midpoint_1 = smpl_joints[12][2]
+
+        # Set the color of vertices below the midpoint to red
+        vertex_colors[vertices[:, 1] > y_midpoint_1] = [255, 0, 0, 175]
+        # body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+        body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False, vertex_colors=vertex_colors)
         return SceneInterface(mesh_scene=body_mesh, smpl_joints=smpl_joints, probe_centroid=centroid_3d, pelvis_coords=pelvis_translation) 

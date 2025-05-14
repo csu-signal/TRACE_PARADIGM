@@ -240,7 +240,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         if self.mesh.probe_centroid is not None:
             # print("probe is detected", mesh.probe_centroid)
             sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=0.04)
-            sphere_trimesh.visual.vertex_colors = [255, 0, 0, 255]   # RGBA red
+            sphere_trimesh.visual.vertex_colors = [0, 0, 255, 255]   # RGBA blue
             sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=False)
             
             if self.scene.has_node(self.pn):
@@ -257,7 +257,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             for body_part in self.scanning_state.keys():
                 # if body_part != "right_thigh": 
                 #     continue
-                self.add_new_probe_marker(body_part, 0.2, -90, add_shpere=False, sphere_radius=0.02, sphere_color=(0.2,0.8,1.0,1.0), add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255, 64, 32, 255], np.uint8), gamma=2.5)
+                self.add_new_probe_marker(body_part, 0.2, -90, add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255,211,67, 255], np.uint8), gamma=2.5)
 
 
 
@@ -463,8 +463,9 @@ class DisplayScene(BaseFeature[EmptyInterface]):
     def point_to_line_distance_and_intersection_3d(self, point, line_point1, line_point2):
         """
         Calculate the perpendicular distance of a point from a line in 3D space,
-        return the point of intersection on the line, and calculate the angle
-        between the line and the vector from the intersection point to the given point.
+        return the point of intersection on the line, and calculate the azimuth
+        inside the X-Z plane between the x-axis and the vector from the intersection
+        point to the given point.
 
         Parameters:
             point (np.array): The point in 3D space (3D coordinates).
@@ -475,8 +476,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             tuple: A tuple containing:
                 - float: The perpendicular distance from the point to the line.
                 - np.array: The point of intersection on the line (3D coordinates).
-                - float: The angle in radians between the line and the vector from
-                         the intersection point to the given point.
+                - float: The azimuth angle in radians inside the X-Z plane.
         """
         point = np.array(point)
         line_point1 = np.array(line_point1)
@@ -499,15 +499,11 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         # Vector from the intersection point to the given point
         intersection_to_point_vector = point - intersection_point
 
-        # Calculate the angle between the line direction and the intersection-to-point vector
+        # Calculate the azimuth angle inside the X-Z plane
         if np.linalg.norm(intersection_to_point_vector) > 1e-8:  # Avoid division by zero
-            angle = np.arccos(
-                np.clip(
-                    np.dot(line_direction_normalized, intersection_to_point_vector / np.linalg.norm(intersection_to_point_vector)),
-                    -1.0,
-                    1.0
-                )
-            )
+            xz_projection = intersection_to_point_vector[[0, 2]]  # Project onto X-Z plane
+            x_axis = np.array([1, 0])  # Define the x-axis in the X-Z plane
+            angle = np.arctan2(xz_projection[1], xz_projection[0])  # Azimuth angle in radians
         else:
             angle = 0.0  # If the point lies exactly on the line, the angle is 0
 
@@ -594,7 +590,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         # ray origin & direction ---------------------------------------
         #origin   = pA + (l / normAB) * vAB                               # on AB
         # alpha    = math.radians(alpha_deg)
-        alpha    = -angle_intersection
+        alpha    = angle_intersection
         dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
         dir_vec /= np.linalg.norm(dir_vec)
 
@@ -666,7 +662,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             # ray origin & direction ---------------------------------------
             #origin   = pA + (l / normAB) * vAB                               # on AB
             # alpha    = math.radians(alpha_deg)
-            alpha    = -alpha_deg
+            alpha    = alpha_deg
             dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
             dir_vec /= np.linalg.norm(dir_vec)
 
