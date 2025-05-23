@@ -34,6 +34,8 @@ from mmdemo.features.utterance.audio_input_features import MicAudio, RecordedAud
 from mmdemo.features.utterance.vad_builder_feature import VADUtteranceBuilder
 from mmdemo.features.planner.planner_feature import Planner
 
+from mmdemo.features.realSense.real_sense_camera import RealSenseCameraDevice
+
 #add feature pose created by CSU
 from mmdemo.features.pose.pose_feature import Pose
 from mmdemo.features.pose.selected_participant_feature import SelectedParticipant
