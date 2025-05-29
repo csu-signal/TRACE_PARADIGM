@@ -149,24 +149,28 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         # self.scanning_progress = {"thigh": 0, "shin": 0} #JACK123
         self.scanning_state = {
             "right_thigh": {
-                "start_index": 9,
+                "start_index": 39,
                 "end_index": 10,
-                "saved_marker_coords": set()
+                "saved_marker_coords": set(),
+                "progress": 0
             },
             "right_shin": {
                 "start_index": 10,
                 "end_index": 11,
-                "saved_marker_coords": set()
+                "saved_marker_coords": set(),
+                "progress": 0
             },
             "left_thigh": {
-                "start_index": 12,
+                "start_index": 39,
                 "end_index": 13,
-                "saved_marker_coords": set()
+                "saved_marker_coords": set(),
+                "progress": 0
             },
             "left_shin": {
                 "start_index": 13,
                 "end_index": 14,
-                "saved_marker_coords": set()
+                "saved_marker_coords": set(),
+                "progress": 0
             }
         }
 
@@ -182,10 +186,10 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         self.scene.clear()
         self.caption = caption = [dict(
             text     = "Start scanning",
-            location = TextAlign.TOP_CENTER,
+            location = TextAlign.TOP_LEFT,
             font_name = r"C:\Windows\Fonts\arial.ttf",
-            font_pt   = 30,
-            color    = (0.,1.,0.,1.),
+            font_pt   = 72,
+            color    = (0.,0.,0.,1.),
             scale    = 1.0)]
         
         # default camera pose is harded code after determining camera position by manually rotating and translating the pyrender scene
@@ -211,8 +215,20 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         # self.scene.set_pose(axis_node, np.eye(4))
 
 
-        self.viewer = pyrender.Viewer(self.scene, use_raymond_lighting=True, run_in_thread=True, viewer_flags={"record": self.record, 'caption': self.caption,},)
-
+        self.viewer = pyrender.Viewer(
+            self.scene,
+            use_raymond_lighting=True,
+            run_in_thread=True,
+            viewer_flags={
+            "record": self.record,
+            'caption': self.caption,
+            'registered_keys': {
+                "k": (self.reset_scanning_state, 'VIGIL'),
+                "K": (self.reset_scanning_state, 'VIGIL'),
+                "y": self.reset_scanning_state,
+            }
+            },
+        )
 
     def get_output(
         self,
@@ -240,7 +256,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         if self.mesh.probe_centroid is not None:
             # print("probe is detected", mesh.probe_centroid)
             sphere_trimesh = trimesh.creation.icosphere(subdivisions=3, radius=0.04)
-            sphere_trimesh.visual.vertex_colors = [0, 0, 255, 255]   # RGBA blue
+            sphere_trimesh.visual.vertex_colors = [255, 111, 0, 255]   # RGBA red
             sphere = pyrender.Mesh.from_trimesh(sphere_trimesh, smooth=False)
             
             if self.scene.has_node(self.pn):
@@ -257,7 +273,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             for body_part in self.scanning_state.keys():
                 # if body_part != "right_thigh": 
                 #     continue
-                self.add_new_probe_marker(body_part, 0.2, -90, add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255,211,67, 255], np.uint8), gamma=2.5)
+                self.add_new_probe_marker(body_part, 0.15, -90, add_color_gradient=True, inner_r=0.01, outer_r=0.03, hit_rgba=np.array([255,211,67, 255], np.uint8), gamma=2.5)
 
 
 
@@ -265,15 +281,26 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         # render the new mesh after removing the previous one
         if self.scene.has_node(self.mn):
             self.scene.remove_node(self.mn)
+            self.scene.remove_node(self.skeleton)
 
 
         mesh_pyrender = pyrender.Mesh.from_trimesh(self.mesh.mesh_scene)
         self.mn = pyrender.Node(mesh=mesh_pyrender)
+
+
+        sm = trimesh.creation.uv_sphere(radius=0.01)
+        sm.visual.vertex_colors = [0, 0.1, 1, 1.0]
+        tfs = np.tile(np.eye(4), (len(self.mesh.smpl_joints), 1, 1))
+        tfs[:, :3, 3] = self.mesh.smpl_joints
+        joints_pcl = pyrender.Mesh.from_trimesh(sm, poses=tfs)
+        self.skeleton = self.scene.add(joints_pcl)
+
         self.scene.add_node(self.mn)
 
-        progress = self.scanning_progress()
+        self.calculate_scanning_percentage()
+        progress = self.progress_string()
         print(f"scanning progress: {progress}")
-        # self.viewer.viewer_flags['caption'][0]['text'] = progress
+        self.viewer.viewer_flags['caption'][0]['text'] = progress
 
         self.viewer.render_lock.release()
 
@@ -295,16 +322,16 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         os.makedirs(f"output/{self.save_dir_prefix}/", exist_ok=True)  # Creates the directory if it doesn't exist
         self.viewer.save_gif(video_name)
     
-    def scanning_progress(self):
+    def progress_string(self):
         """
-        Returns a string indicating the progress of the scanning process.
+        Returns a formatted string indicating the progress of the scanning process.
         """
-        progress = ""
+        progress = "Scanning Progress:\n"
         for body_part, data in self.scanning_state.items():
-            if len(data["saved_marker_coords"]) > 0:
-                progress += f"{body_part}: {len(data['saved_marker_coords'])} markers\n"
-            else:
-                progress += f"{body_part}: No markers\n"
+            if body_part in ["right_shin", "left_shin"]:
+                continue
+            percentage = data["progress"]
+            progress += f"- {body_part.replace('_', ' ').title()}: {percentage:.0f}% completed ({len(data['saved_marker_coords'])})\n"
         return progress.strip()
     
     def add_custom_marker_az(self,
@@ -351,7 +378,9 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         print(joints[0])
         print(joints[joint_id_a])
         print(joints[joint_id_b])
+
         pA, pB = joints[joint_id_a], joints[joint_id_b]
+        
         vAB    = pB - pA
         normAB = np.linalg.norm(vAB)
         if normAB < 1e-8:
@@ -557,7 +586,13 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                             ,gamma = 5):
 
         joint_id_a, joint_id_b = self.scanning_state[body_part]["start_index"], self.scanning_state[body_part]["end_index"]
+
+        
         pA, pB = self.mesh.smpl_joints[joint_id_a], self.mesh.smpl_joints[joint_id_b]
+        if body_part == "right_thigh":
+            pA[0] += 0.25
+        elif body_part == "left_thigh":
+            pA[0] -= 0.25
         vAB    = pB - pA
         normAB = np.linalg.norm(vAB)
         if normAB < 1e-8:
@@ -580,7 +615,6 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         distance_threshold = l
         if self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
             add_color_gradient = True
-            self.scanning_state[body_part]["saved_marker_coords"].add(tuple(self.mesh.probe_centroid))
         else:
             add_color_gradient = False
 
@@ -621,6 +655,14 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                 target = hit_rgba.astype(np.float32)                # make it float for math
                 blend = (w * target + (1.0 - w) * base).astype(np.uint8)
                 self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
+            
+            # Save the coordinates of the in_band mesh vertices (relative to start point)
+            start_point = pA
+            for idx in np.where(in_band)[0]:
+                mesh_vertex = self.mesh.mesh_scene.vertices[idx]
+                rel_coord = tuple(mesh_vertex - start_point)
+                self.scanning_state[body_part]["saved_marker_coords"].add(rel_coord)
+
     
 
     def add_previous_markers(self, 
@@ -637,7 +679,13 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                             ,gamma = 20):
 
         joint_id_a, joint_id_b = self.scanning_state[body_part]["start_index"], self.scanning_state[body_part]["end_index"]
+
+
         pA, pB = self.mesh.smpl_joints[joint_id_a], self.mesh.smpl_joints[joint_id_b]
+        if body_part == "right_thigh":
+            pA[0] += 0.25
+        elif body_part == "left_thigh":
+            pA[0] -= 0.25
         vAB    = pB - pA
         normAB = np.linalg.norm(vAB)
         if normAB < 1e-8:
@@ -655,36 +703,97 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         for pc in self.scanning_state[body_part]["saved_marker_coords"]:
             
-            _pc = np.array(pc)
+            # Convert the relative marker coordinate back to absolute by adding pA (start point)
+            _pc = np.array(pc) + pA
             _, ABip, alpha_deg = self.point_to_line_distance_and_intersection_3d(_pc, pA, pB)
             # alpha_deg = -90 if alpha_deg == 0 else np.degrees(alpha_deg)
             origin = ABip
             # ray origin & direction ---------------------------------------
-            #origin   = pA + (l / normAB) * vAB                               # on AB
+            # origin   = pA + (l / normAB) * vAB                               # on AB
             # alpha    = math.radians(alpha_deg)
-            alpha    = alpha_deg
-            dir_vec  =  math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
+            alpha    = -alpha_deg
+            dir_vec  = math.cos(alpha) * x_axis + math.sin(alpha) * z_axis
             dir_vec /= np.linalg.norm(dir_vec)
 
             # ray-mesh intersection ----------------------------------------
             loc, *_ = self.mesh.mesh_scene.ray.intersects_location(
                         origin.reshape(1,3), dir_vec.reshape(1,3),
                         multiple_hits=False)
-            if len(loc)==0:
+            if len(loc) == 0:
                 return None
             hit = loc[0]
 
             dists   = np.linalg.norm(self.mesh.mesh_scene.vertices - hit, axis=1)
             in_band = dists < outer_r
-            
+
             if np.any(in_band):
-                                
                 lin   = (outer_r - dists[in_band]) / (outer_r - inner_r)
                 w     = np.clip(lin, 0.0, 1.0) ** gamma
                 w     = w[:, None]                                  # (k,1)
-            
+
                 base  = self.mesh.mesh_scene.visual.vertex_colors[in_band].astype(np.float32)
                 target = hit_rgba.astype(np.float32)                # make it float for math
                 blend = (w * target + (1.0 - w) * base).astype(np.uint8)
-            
+
                 self.mesh.mesh_scene.visual.vertex_colors[in_band] = blend
+
+    def calculate_scanning_percentage(self, num_divisions=10, points_threshold=5):
+        """
+        Calculate the scanning percentage for each body part based on saved marker coordinates.
+
+        Args:
+            num_divisions (int): The number of divisions to create on the line between start and end points.
+            points_threshold (int): The number of points required to consider a division as scanned.
+
+        Returns:
+            str: A string indicating the scanning percentage for each body part.
+        """
+        result = ""
+        for body_part, data in self.scanning_state.items():
+            print(f"body_part: {body_part}")
+            start_point = self.mesh.smpl_joints[data["start_index"]]
+            end_point = self.mesh.smpl_joints[data["end_index"]]
+            line_vector = end_point - start_point
+            division_points = [start_point + (i / num_divisions) * line_vector for i in range(num_divisions )]  # Create divisions using the line vector
+            division_points = [start_point] + division_points
+            division_points.append(end_point)  # Add the end point to the list of division points
+            print(f"division_points: {division_points}, {end_point}")
+
+            completed_divisions = 0
+
+            for i in range(len(division_points) - 1):
+                _start_point = division_points[i]
+                _end_point = division_points[i + 1]
+                points_scanned = 0
+
+                for marker in data["saved_marker_coords"]:
+                    marker = np.array(marker)
+                    distance, intersection_point, _ = self.point_to_line_distance_and_intersection_3d(
+                        marker, _start_point, _end_point
+                    )
+                    if self.is_point_on_line_segment(intersection_point, _start_point, _end_point):
+                        points_scanned += 1
+                print(f"points_scanned: {points_scanned}")
+                # Check if there are enough points scanned for the division
+                if points_scanned >= points_threshold:
+                    completed_divisions += 1
+                    print(f"completed_divisions: {completed_divisions}")
+
+            # Calculate the percentage of completed divisions
+            percentage = (completed_divisions / num_divisions) * 100
+            self.scanning_state[body_part]["progress"] = percentage
+            # result += f"{body_part} - {percentage:.0f}%\r\n"
+
+        # return result.strip()
+
+    def reset_scanning_state(self):
+        """
+        Reset the scanning state for all body parts.
+        Clears saved marker coordinates and resets the proximity tracker.
+        """
+        print("Resetting scanning state...")
+        for body_part in self.scanning_state.keys():
+            self.scanning_state[body_part]["saved_marker_coords"].clear()
+            self.scanning_state[body_part]["progress"] = 0
+        # self.proximity_tracker = ProximityTracker(6, 0.2)
+        print("Scanning state has been reset.")
