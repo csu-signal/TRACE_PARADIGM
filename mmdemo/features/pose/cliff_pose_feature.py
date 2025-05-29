@@ -95,39 +95,39 @@ class CliffPose(BaseFeature[SceneInterface]):
         bt: BodyTrackingInterface,
         calibration: CameraCalibrationInterface,
     ):
-        if not color.is_new() or not depth.is_new() or not bt.is_new() or not calibration.is_new():
+        if not color.is_new() or not depth.is_new() or not calibration.is_new():
             return None
 
         # get body tracking info (azure_keypoints)
-        practitioner = []
-        patient = []
-        patientConfidence = []
-        bt = fix_body_id(bt)
-        for bodyIndex, body in enumerate(bt.bodies):  
-            bodyId = int(body["wtd_body_id"])
-            for jointIndex, joint in enumerate(body["joint_positions"]):
-                points2D, _ = cv.projectPoints(
-                    np.array(joint[:3]), 
-                    calibration.rotation,
-                    calibration.translation,
-                    calibration.camera_matrix,
-                    calibration.distortion) 
-                point = (int(points2D[0][0][0]),int(points2D[0][0][1]))  
-                if(bodyId == 1):
-                    patient.append(point)
-                    patientConfidence.append(joint[3] / 2.0) #convert to 0, 0.5 ot 1.0
-                if(bodyId == 2):
-                    practitioner.append(point)
+        # practitioner = []
+        # patient = []
+        # patientConfidence = []
+        # bt = fix_body_id(bt)
+        # for bodyIndex, body in enumerate(bt.bodies):  
+        #     bodyId = int(body["wtd_body_id"])
+        #     for jointIndex, joint in enumerate(body["joint_positions"]):
+        #         points2D, _ = cv.projectPoints(
+        #             np.array(joint[:3]), 
+        #             calibration.rotation,
+        #             calibration.translation,
+        #             calibration.camera_matrix,
+        #             calibration.distortion) 
+        #         point = (int(points2D[0][0][0]),int(points2D[0][0][1]))  
+        #         if(bodyId == 1):
+        #             patient.append(point)
+        #             patientConfidence.append(joint[3] / 2.0) #convert to 0, 0.5 ot 1.0
+        #         if(bodyId == 2):
+        #             practitioner.append(point)
 
 
-        if len(patient) == 0:
-            return SceneInterface(mesh_scene=None, smpl_joints=None, probe_centroid=None, pelvis_coords=None)
-        patient_azure_keypoints = np.array(patient).reshape(32,2)
-        patient_azure_confidence = np.array(patientConfidence).reshape(32,1)
+        # if len(patient) == 0:
+        #     return SceneInterface(mesh_scene=None, smpl_joints=None, probe_centroid=None, pelvis_coords=None)
+        # patient_azure_keypoints = np.array(patient).reshape(32,2)
+        # patient_azure_confidence = np.array(patientConfidence).reshape(32,1)
         
         # getting RGB image and depth images
         frame = color.frame
-        frame = frame[:, :, ::-1] # need to convert from RGB to BGR for CLIFF
+        # frame = frame[:, :, ::-1] # need to convert from RGB to BGR for CLIFF
         depth_frame = depth.frame
         depth_map = depth_frame/1000.0
 
@@ -139,17 +139,17 @@ class CliffPose(BaseFeature[SceneInterface]):
         camera_center = np.array([960, 540])
 
         # MAP from Kinect to openpose sequence of joints
-        keypoints = process_keypoints(patient_azure_keypoints, patient_azure_confidence)
+        # keypoints = process_keypoints(patient_azure_keypoints, patient_azure_confidence)
 
         # Get translation for SMPL
-        try:
-            pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
-        except:
-            pelvis_translation = None
+        # try:
+        #     pelvis_translation = get_pelvis_translation(patient_azure_keypoints[0],depth_map, K, self.device)
+        # except:
+        pelvis_translation = None
         
         img_w=1920.0
         img_h=1080.0
-        bbox, w, h = compute_bbox_full_scale(patient_azure_keypoints, img_w, img_h)
+        bbox = [img_w / 4, 0, (3 * img_w) / 4, img_h]
 
 
         img_h_t = torch.tensor([img_h], dtype=torch.float32, device=self.device)
@@ -180,21 +180,23 @@ class CliffPose(BaseFeature[SceneInterface]):
 
         # Use data_full_cam if using translation data from Kinect
         data_full_cam = torch.tensor([[kinect_translation[0]/1000,  -kinect_translation[1]/1000, kinect_translation[2]/1000]], dtype=torch.float32, device=self.device)
-        
+        pred_cam_full = cam_crop2full(pred_cam_crop, center, scale, full_img_shape, focal_length)
         # Process pose data
         init_pose = transforms.matrix_to_axis_angle(pred_rotmat).contiguous().view(-1, 72)    
         
         # For reference - >refine_smpl(smpl,betas, init_pose, pelvis_translation,pred_cam_full, keypoints, camera_center_tensor, focal_length,pose_prior, num_iters=5, device="cuda")
-        new_opt_vertices, new_opt_joints, new_opt_pose,new_opt_betas, faces = refine_smpl(smpl=self.smpl, betas=betas,
-            init_pose= init_pose, 
-            pelvis_translation =pelvis_translation,
-            pred_cam_full =data_full_cam,
-            keypoints= keypoints,
-            camera_center_tensor =camera_center_tensor,
-            focal_length = focal_length,
-            pose_prior=self.pose_prior,
-            num_iters=1,
-            device=self.device)
+        # new_opt_vertices, new_opt_joints, new_opt_pose,new_opt_betas, faces = refine_smpl(smpl=self.smpl, betas=betas,
+        #     init_pose= init_pose, 
+        #     pelvis_translation =pelvis_translation,
+        #     pred_cam_full =data_full_cam,
+        #     keypoints= keypoints,
+        #     camera_center_tensor =camera_center_tensor,
+        #     focal_length = focal_length,
+        #     pose_prior=self.pose_prior,
+        #     num_iters=1,
+        #     device=self.device)
+
+        new_opt_vertices, new_opt_joints, faces = smpl_skip_refinement(self.smpl, betas, init_pose, pose2rot=True, transl=pred_cam_full)
 
         try:
             new_opt_vertices, new_joints = smpl_fix_coordinates(new_opt_vertices,new_opt_joints, pelvis_translation)
@@ -209,16 +211,17 @@ class CliffPose(BaseFeature[SceneInterface]):
             faces = faces.cpu().numpy() if torch.is_tensor(faces) else faces
 
         # Initialize vertex_colors with default color (e.g., white with full opacity)
-        vertex_colors = np.ones((vertices.shape[0], 4), dtype=np.uint8) * 255
+        # vertex_colors = np.ones((vertices.shape[0], 4), dtype=np.uint8) * 255
         
         
         smpl_joints = new_joints.cpu().detach().numpy()[0]  # shape (num_joints, 3)
-        y_midpoint_1 = smpl_joints[12][1]
+        # y_midpoint_1 = smpl_joints[12][1]
         # z_midpoint_1 = smpl_joints[12][2]
 
         # Set the color of vertices below the midpoint to red
-        vertex_colors[vertices[:, 1] > y_midpoint_1] = [255, 0, 0, 175]
-        # body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
-
-        body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False, vertex_colors=vertex_colors)
+        # vertex_colors[vertices[:, 1] > y_midpoint_1] = [255, 0, 0, 175]
+        
+        body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+        # body_mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False, vertex_colors=vertex_colors)
+        
         return SceneInterface(mesh_scene=body_mesh, smpl_joints=smpl_joints, probe_centroid=centroid_3d, pelvis_coords=pelvis_translation) 

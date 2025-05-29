@@ -105,4 +105,4 @@ def smpl_skip_refinement(smpl, betas, init_pose, pose2rot, transl):
                        global_orient=init_pose[:, :3],
                        pose2rot=True,
                        transl=transl)    
-    return pred_output.vertices, smpl.faces
+    return pred_output.vertices.detach(), pred_output.joints.detach(), smpl.faces
