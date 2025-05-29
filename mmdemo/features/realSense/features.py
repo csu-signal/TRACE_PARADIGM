@@ -58,26 +58,26 @@ class RealSenseDepth(BaseFeature):
         )
 
 
-# @final
-# class AzureKinectBodyTracking(BaseFeature):
-#     """
-#     Feature to get body tracking info from Real Sense.
+@final
+class AzureKinectBodyTracking(BaseFeature):
+    """
+    Feature to get body tracking info from Real Sense.
 
-#     The input interface is `_RealSenseInterface`, which is a private
-#     interface that is created using helper functions.
+    The input interface is `_RealSenseInterface`, which is a private
+    interface that is created using helper functions.
 
-#     The output interface is `BodyTrackingInterface`.
-#     """
+    The output interface is `BodyTrackingInterface`.
+    """
 
-#     def get_output(
-#         self, real_input: _RealSenseInterface
-#     ) -> BodyTrackingInterface | None:
-#         if not real_input.is_new():
-#             return None
-#         return BodyTrackingInterface(
-#             bodies=real_input.body_tracking["bodies"],
-#             timestamp_usec=real_input.body_tracking["timestamp_usec"],
-#         )
+    def get_output(
+        self, real_input: _RealSenseInterface
+    ) -> BodyTrackingInterface | None:
+        if not real_input.is_new():
+            return None
+        return   BodyTrackingInterface(
+            bodies=real_input.body_tracking["bodies"],
+            timestamp_usec=real_input.body_tracking["timestamp_usec"],
+        ) if hasattr(real_input.body_tracking, "bodies") else None
 
 
 @final
@@ -133,7 +133,7 @@ def create_real_sense_features(
 
     color = RealSenseColor(input_feature)
     depth = RealSenseDepth(input_feature)
-    # body_tracking = AzureKinectBodyTracking(input_feature)
+    body_tracking = AzureKinectBodyTracking(input_feature)
     calibration = RealSenseCameraCalibration(input_feature)
 
-    return color, depth, calibration
+    return color, depth, calibration, body_tracking

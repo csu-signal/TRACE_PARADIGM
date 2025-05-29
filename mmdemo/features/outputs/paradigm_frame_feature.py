@@ -269,7 +269,7 @@ class ParadigmFrame(BaseFeature[ColorImageInterface]):
         bt: BodyTrackingInterface,
         calibration: CameraCalibrationInterface,
     ):
-        if not color.is_new() or not gestureLandmarks.is_new() or not bt.is_new() or not calibration.is_new():
+        if not color.is_new() or not calibration.is_new():
             return None
 
         # copy the frame, do not draw on the original frame

@@ -76,8 +76,8 @@ class RealSenseCameraDevice(BaseFeature):
         # video playback
         # rs.config.enable_device_from_file(config, "D:\Weights_Task\Data\Fib_weights_original_videos\Group_01-master.mkv") # Replace with your file path
 
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+        config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
+        config.enable_stream(rs.stream.color, 1920, 1080, rs.format.rgb8, 30)
 
         # Start streaming
         self.profile = self.pipeline.start(config)
@@ -100,7 +100,7 @@ class RealSenseCameraDevice(BaseFeature):
         color_image = np.asanyarray(color_frame.get_data())
 
         # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_BONE)
 
         depth_colormap_dim = depth_colormap.shape
         color_colormap_dim = color_image.shape

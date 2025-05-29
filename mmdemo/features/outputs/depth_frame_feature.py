@@ -271,7 +271,7 @@ class DepthFrame(BaseFeature[DepthImageInterface]):
         bt: BodyTrackingInterface,
         calibration: CameraCalibrationInterface
     ):
-        if not gestureLandmarks.is_new() or not depth.is_new() or not bt.is_new() or not calibration.is_new():
+        if not depth.is_new() or not calibration.is_new():
             return None
 
         # ensure we are not modifying the color frame itself
