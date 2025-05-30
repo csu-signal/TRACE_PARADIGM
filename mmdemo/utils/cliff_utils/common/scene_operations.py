@@ -23,9 +23,9 @@ def rgb_hsv_mask(bgr, min_area= 400):
     v = hsv[..., 2] / 255.0
 
     # initial threshold
-    mask = ((0.033 <= h) & (h <= 0.086) &
-            (0.632 <= s) & (s <= 1.000) &
-            (0.682 <= v) & (v <= 1.0)).astype(np.uint8) * 255
+    mask = ((0.000 <= h) & (h <= 0.064) &
+            (0.238 <= s) & (s <= 1.000) &
+            (0.891 <= v) & (v <= 1.0)).astype(np.uint8) * 255
 
     # clean–up
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))

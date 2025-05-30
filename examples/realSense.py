@@ -44,7 +44,7 @@ if __name__ == "__main__":
             DisplayFrame(depth_output_frame),
             DisplayScene(displayScene, record=False, save_dir_prefix=save_dir_prefix),
             # SaveVideo(depth_output_frame_save, frame_rate=10, video_type="depth", delete_output=False),
-            # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False),
+            # SaveVideo(color_output_frame, frame_rate=10, video_type="color", delete_output=False, save_dir_prefix=save_dir_prefix),
             # ParadigmLog(gesture, body_tracking, depth, calibration, csv=True, fileName="paradigm"),
             #Log(transcriptions, stdout=True),
         ]

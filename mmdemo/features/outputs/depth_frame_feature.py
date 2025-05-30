@@ -282,7 +282,7 @@ class DepthFrame(BaseFeature[DepthImageInterface]):
         # Normalize the disparity map to range 0-255 for display
         # depth_image_8bit = cv.imread(depth.frame, cv.IMREAD_GRAYSCALE)
         depth_image_8bit = cv.normalize(depth.frame, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
-        depth_image_colorized = cv.applyColorMap(depth_image_8bit, cv.COLORMAP_BONE)
+        depth_image_colorized = cv.applyColorMap(depth_image_8bit, cv.COLORMAP_JET)
 
         if self.landmarks:
             for land in gestureLandmarks.landmarks:
