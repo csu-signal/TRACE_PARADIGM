@@ -299,7 +299,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         self.calculate_scanning_percentage()
         progress = self.progress_string()
-        print(f"scanning progress: {progress}")
+        # print(f"scanning progress: {progress}")
         self.viewer.viewer_flags['caption'][0]['text'] = progress
 
         self.viewer.render_lock.release()
@@ -372,12 +372,12 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         ,gamma = 2.5)
         Returns hit-point or None.
         """
-        print("add_custom_marker_az")
-        print("joint_id_a", joint_id_a)
-        print("joint_id_b", joint_id_b)
-        print(joints[0])
-        print(joints[joint_id_a])
-        print(joints[joint_id_b])
+        # print("add_custom_marker_az")
+        # print("joint_id_a", joint_id_a)
+        # print("joint_id_b", joint_id_b)
+        # print(joints[0])
+        # print(joints[joint_id_a])
+        # print(joints[joint_id_b])
 
         pA, pB = joints[joint_id_a], joints[joint_id_b]
         
@@ -398,7 +398,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         # let's do it based on probe centroid - Jack123
         probe_distance, AB_intersection_point = self.point_to_line_distance_and_intersection_3d(probe_centroid, pA, pB)
-        print(f"probe_distance: {probe_distance}")
+        # print(f"probe_distance: {probe_distance}")
         distance_threshold = 0.2
         if self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
             self.custom_markers.add(tuple(probe_centroid))
@@ -420,7 +420,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
             return None
         hit = loc[0]
         probe_squared_distance_to_hit = np.sum((hit - probe_centroid) ** 2, axis=0)
-        print(f"probe_squared_distance_to_hit: {probe_squared_distance_to_hit}")
+        # print(f"probe_squared_distance_to_hit: {probe_squared_distance_to_hit}")
         radius = 0.3
         close = probe_squared_distance_to_hit < radius ** 2
 
@@ -610,7 +610,7 @@ class DisplayScene(BaseFeature[EmptyInterface]):
 
         # let's do it based on probe centroid - Jack123
         probe_distance, AB_intersection_point, angle_intersection = self.point_to_line_distance_and_intersection_3d(self.mesh.probe_centroid, pA, pB)
-        print(f"probe_distance: {probe_distance}")
+        # print(f"probe_distance: {probe_distance}")
         
         distance_threshold = l
         if self.is_point_on_line_segment(AB_intersection_point, pA, pB) and probe_distance < distance_threshold:
@@ -750,14 +750,14 @@ class DisplayScene(BaseFeature[EmptyInterface]):
         """
         result = ""
         for body_part, data in self.scanning_state.items():
-            print(f"body_part: {body_part}")
+            # print(f"body_part: {body_part}")
             start_point = self.mesh.smpl_joints[data["start_index"]]
             end_point = self.mesh.smpl_joints[data["end_index"]]
             line_vector = end_point - start_point
             division_points = [start_point + (i / num_divisions) * line_vector for i in range(num_divisions )]  # Create divisions using the line vector
             division_points = [start_point] + division_points
             division_points.append(end_point)  # Add the end point to the list of division points
-            print(f"division_points: {division_points}, {end_point}")
+            # print(f"division_points: {division_points}, {end_point}")
 
             completed_divisions = 0
 
@@ -773,11 +773,11 @@ class DisplayScene(BaseFeature[EmptyInterface]):
                     )
                     if self.is_point_on_line_segment(intersection_point, _start_point, _end_point):
                         points_scanned += 1
-                print(f"points_scanned: {points_scanned}")
+                # print(f"points_scanned: {points_scanned}")
                 # Check if there are enough points scanned for the division
                 if points_scanned >= points_threshold:
                     completed_divisions += 1
-                    print(f"completed_divisions: {completed_divisions}")
+                    # print(f"completed_divisions: {completed_divisions}")
 
             # Calculate the percentage of completed divisions
             percentage = (completed_divisions / num_divisions) * 100
