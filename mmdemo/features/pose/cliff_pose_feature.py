@@ -129,6 +129,9 @@ class CliffPose(BaseFeature[SceneInterface]):
         frame = color.frame
         # frame = frame[:, :, ::-1] # need to convert from RGB to BGR for CLIFF
         depth_frame = depth.frame
+        if depth_frame.shape[0] != 1080 and depth_frame.shape[1] != 1920:
+            depth_frame = cv.resize(depth_frame, (1920, 1080), interpolation=cv.INTER_LINEAR)
+
         depth_map = depth_frame/1000.0
 
 
