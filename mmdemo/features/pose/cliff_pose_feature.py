@@ -129,11 +129,11 @@ class CliffPose(BaseFeature[SceneInterface]):
         frame = color.frame
         # frame = frame[:, :, ::-1] # need to convert from RGB to BGR for CLIFF
         depth_frame = depth.frame
-        if depth_frame.shape[0] != 1080 and depth_frame.shape[1] != 1920:
-            depth_frame = cv.resize(depth_frame, (1920, 1080), interpolation=cv.INTER_LINEAR)
+        # if depth_frame.shape[0] != 1080 and depth_frame.shape[1] != 1920:
+        #     depth_frame = cv.resize(depth_frame, (1920, 1080), interpolation=cv.INTER_LINEAR)
 
         depth_map = depth_frame/1000.0
-
+    
 
         # Camera Calibration
 
@@ -150,8 +150,8 @@ class CliffPose(BaseFeature[SceneInterface]):
         # except:
         pelvis_translation = None
         
-        img_w=1920.0
-        img_h=1080.0
+        img_w=640.0
+        img_h=480.0
         bbox = [img_w / 4, 0, (3 * img_w) / 4, img_h]
 
 
