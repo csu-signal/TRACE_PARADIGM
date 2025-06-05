@@ -16,17 +16,18 @@ from mmdemo.utils.cliff_utils.common.utils import strip_prefix_if_present, cam_c
 import time
 from mmdemo.utils.cliff_utils.common.imutils import process_image 
 
-def rgb_hsv_mask(bgr, min_area= 400):
+def rgb_hsv_mask(bgr, min_area= 100):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.float32)
     h = hsv[..., 0] / 179.0
     s = hsv[..., 1] / 255.0
     v = hsv[..., 2] / 255.0
 
-    # initial threshold
-    mask = ((0.000 <= h) & (h <= 0.064) &
-            (0.238 <= s) & (s <= 1.000) &
-            (0.891 <= v) & (v <= 1.0)).astype(np.uint8) * 255
-
+    mask = ((h >= 0.038) & (h <= 0.063) & 
+            (s >= 0.302) & (s <= 1.00) &
+            (v >= 0.9) & (v <= 1.00)).astype(np.uint8) * 255
+    # lower = np.array([6, 66, 155], dtype=np.uint8)
+    # upper = np.array([13, 255, 255], dtype=np.uint8)
+    # mask = cv2.inRange(hsv, lower, upper)
     # clean–up
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
